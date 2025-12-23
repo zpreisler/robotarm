@@ -3,7 +3,7 @@
 inline void lcd_ddr_out(){
 	LCD_CTRL_DDR_OUTPUT;
 	LCD_DATA_DDR_OUTPUT;
-	LCD_RW_LOW;  // Keep RW LOW for write-only mode
+	// RW is tied to GND on shield, no need to control it
 }
 
 void lcd_pulse(){
@@ -142,4 +142,14 @@ void lcd_print(const char *c){
 		lcd_print_char(c);
 		c++;
 	}
+}
+
+void lcd_backlight_on(void){
+	LCD_BACKLIGHT_DDR |= (1 << LCD_BACKLIGHT_PIN);  // Set as output
+	LCD_BACKLIGHT_ON;
+}
+
+void lcd_backlight_off(void){
+	LCD_BACKLIGHT_DDR |= (1 << LCD_BACKLIGHT_PIN);  // Set as output
+	LCD_BACKLIGHT_OFF;
 }

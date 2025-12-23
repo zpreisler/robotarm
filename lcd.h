@@ -61,14 +61,24 @@
 #define LCD_DATA_HIGH LCD_DATA_PORT |= 0b11110000
 #define LCD_DATA_LOW LCD_DATA_PORT &= 0b00001111
 
-/* Control pins - RS, Enable, RW on PORTB bits 0-2 */
-#define LCD_CMD_HIGH LCD_ENABLE_PORT |= 0b00000111
-#define LCD_CMD_LOW LCD_ENABLE_PORT &= 0b11111000
+/* Control pins - RS, Enable on PORTB bits 0-1 (RW not used, tied to GND on shield) */
+#define LCD_CMD_HIGH LCD_ENABLE_PORT |= 0b00000011
+#define LCD_CMD_LOW LCD_ENABLE_PORT &= 0b11111100
 
 /* DDR configuration */
-#define LCD_CTRL_DDR_OUTPUT LCD_ENABLE_DDR |= 0b00000111  // RS, Enable, RW as outputs
+#define LCD_CTRL_DDR_OUTPUT LCD_ENABLE_DDR |= 0b00000011  // RS, Enable as outputs (not RW)
 #define LCD_DATA_DDR_INPUT LCD_DATA_DDR &= 0b00001111     // D4-D7 as inputs
 #define LCD_DATA_DDR_OUTPUT LCD_DATA_DDR |= 0b11110000    // D4-D7 as outputs
+
+/* Backlight control - Pin 10 (PB2) on LCD Keyboard Shield */
+#ifndef LCD_BACKLIGHT_PORT
+#define LCD_BACKLIGHT_PORT PORTB
+#define LCD_BACKLIGHT_DDR DDRB
+#define LCD_BACKLIGHT_PIN 2
+#endif
+
+#define LCD_BACKLIGHT_ON LCD_BACKLIGHT_PORT |= (1 << LCD_BACKLIGHT_PIN)
+#define LCD_BACKLIGHT_OFF LCD_BACKLIGHT_PORT &= ~(1 << LCD_BACKLIGHT_PIN)
 
 /* Function declarations */
 void lcd_ddr_out(void);
@@ -86,5 +96,7 @@ void lcd_init(void);
 void lcd_set_cursor(uint8_t address);
 void lcd_print_char(const char *c);
 void lcd_print(const char *c);
+void lcd_backlight_on(void);
+void lcd_backlight_off(void);
 
 #endif /* LCD_H */
