@@ -62,17 +62,17 @@ int main(void) {
         // Update LCD display
         lcd_clear();
         lcd_print("Servo:");
-        lcd_print_char((char*)(selected_servo + '0'));
+        lcd_putc(selected_servo + '0');  // Print servo number as character
         lcd_print(" Ang:");
 
         // Display angle (simple integer display)
         if (servo_angle >= 100) {
-            lcd_print_char((char*)((servo_angle / 100) + '0'));
+            lcd_putc((servo_angle / 100) + '0');  // Hundreds digit
         }
         if (servo_angle >= 10) {
-            lcd_print_char((char*)(((servo_angle / 10) % 10) + '0'));
+            lcd_putc(((servo_angle / 10) % 10) + '0');  // Tens digit
         }
-        lcd_print_char((char*)((servo_angle % 10) + '0'));
+        lcd_putc((servo_angle % 10) + '0');  // Ones digit
 
         _delay_ms(50);
     }

@@ -144,6 +144,10 @@ void lcd_print(const char *c){
 	}
 }
 
+void lcd_putc(char c){
+	lcd_print_char(&c);  // Pass address of local char variable
+}
+
 void lcd_backlight_on(void){
 	LCD_BACKLIGHT_DDR |= (1 << LCD_BACKLIGHT_PIN);  // Set as output
 	LCD_BACKLIGHT_ON;

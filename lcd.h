@@ -96,6 +96,7 @@ void lcd_init(void);
 void lcd_set_cursor(uint8_t address);
 void lcd_print_char(const char *c);
 void lcd_print(const char *c);
+void lcd_putc(char c);  // Print single character by value
 void lcd_backlight_on(void);
 void lcd_backlight_off(void);
 
