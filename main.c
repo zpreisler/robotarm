@@ -5,13 +5,17 @@
 #include "lcd.h"
 #include "buttons.h"
 #include "pca9685.h"
+#include "uart.h"
+#include "serial_commands.h"
 
 int main(void) {
-    // Initialize LCD, buttons, and PCA9685
+    // Initialize all systems
     lcd_ddr_out();
     lcd_init();
     lcd_backlight_on();
     buttons_init();
+    uart_init(UART_BAUD_115200);
+    serial_commands_init();
 
     // Initialize PCA9685 for servo control
     pca9685_init(PCA9685_DEFAULT_ADDRESS);
@@ -19,6 +23,9 @@ int main(void) {
 
     // Display startup message
     lcd_print("Robot Arm Ready");
+    uart_puts("\n=== Robot Arm Controller ===\n");
+    uart_puts("Type START for serial mode\n");
+    uart_puts("Or use buttons for manual control\n\n");
     _delay_ms(1000);
 
     // Set all servos to center position (90 degrees)
@@ -30,7 +37,16 @@ int main(void) {
     uint8_t servo_angle = 90;
 
     while (1) {
-        // Read button state
+        // Check for serial START command (Option 3: Explicit mode control)
+        if (serial_check_start()) {
+            // Enter serial mode (blocking until STOP command)
+            serial_mode();
+
+            // After exiting serial mode, continue with button mode
+            continue;
+        }
+
+        // Button mode - read button state
         button_t button = buttons_read();
 
         // Handle button presses

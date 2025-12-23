@@ -5,8 +5,8 @@ CFLAGS = -Wall -Os -DF_CPU=$(F_CPU) -mmcu=$(MCU)
 
 all: main.hex
 
-main.elf: main.o lcd.o buttons.o i2c.o pca9685.o
-	avr-gcc $(CFLAGS) -o main.elf main.o lcd.o buttons.o i2c.o pca9685.o
+main.elf: main.o lcd.o buttons.o i2c.o pca9685.o uart.o serial_commands.o
+	avr-gcc $(CFLAGS) -o main.elf main.o lcd.o buttons.o i2c.o pca9685.o uart.o serial_commands.o
 
 main.o: main.c
 	avr-gcc $(CFLAGS) -c -o main.o main.c
@@ -23,10 +23,16 @@ i2c.o: i2c.c i2c.h
 pca9685.o: pca9685.c pca9685.h i2c.h
 	avr-gcc $(CFLAGS) -c -o pca9685.o pca9685.c
 
+uart.o: uart.c uart.h
+	avr-gcc $(CFLAGS) -c -o uart.o uart.c
+
+serial_commands.o: serial_commands.c serial_commands.h uart.h pca9685.h lcd.h
+	avr-gcc $(CFLAGS) -c -o serial_commands.o serial_commands.c
+
 main.hex: main.elf
 	avr-objcopy -O ihex -R .eeprom main.elf main.hex
 
 clean:
-	rm -f main.elf main.hex main.o lcd.o buttons.o i2c.o pca9685.o
+	rm -f main.elf main.hex main.o lcd.o buttons.o i2c.o pca9685.o uart.o serial_commands.o
 
 .PHONY: all clean
