@@ -144,17 +144,32 @@ uint8_t i2c_write_byte(uint8_t address, uint8_t reg, uint8_t data) {
 
 /*
  * Read a byte from a register
- * Returns: data byte
+ * Returns: data byte (returns 0 on error)
  */
 uint8_t i2c_read_byte(uint8_t address, uint8_t reg) {
     uint8_t data;
+    uint8_t status;
 
     // Start + device address (write mode) to set register
-    i2c_start(address << 1);
-    i2c_write(reg);
+    status = i2c_start(address << 1);
+    if (status != I2C_OK) {
+        i2c_stop();
+        return 0;
+    }
+
+    // Write register address
+    status = i2c_write(reg);
+    if (status != I2C_OK) {
+        i2c_stop();
+        return 0;
+    }
 
     // Repeated start + device address (read mode)
-    i2c_start((address << 1) | 1);
+    status = i2c_start((address << 1) | 1);
+    if (status != I2C_OK) {
+        i2c_stop();
+        return 0;
+    }
 
     // Read data with NACK (last byte)
     data = i2c_read_nack();

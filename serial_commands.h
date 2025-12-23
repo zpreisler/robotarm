@@ -7,12 +7,16 @@
  * Serial Command Interface for Robot Arm Control
  *
  * Commands:
- * - START       : Enter serial control mode
- * - STOP        : Exit serial control mode
- * - S<n>:<angle>: Set servo n to angle (e.g., S0:90)
- * - GET <n>     : Query servo n position
- * - HELP        : List available commands
+ * - START         : Enter serial control mode
+ * - STOP          : Exit serial control mode
+ * - S<n>:<angle>  : Set servo n to angle (n=0-F hex, e.g., S0:90, SA:120)
+ * - POSE <angles> : Set multiple servos (e.g., POSE 90,45,120,90,60,30)
+ * - GET <n>       : Query servo n position (n=0-F hex)
+ * - HELP          : List available commands
  */
+
+/* Configuration */
+#define NUM_SERVOS 6  // Number of servos used (PCA9685 supports up to 16)
 
 /* Command buffer size */
 #define CMD_BUFFER_SIZE 32

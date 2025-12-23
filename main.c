@@ -1,4 +1,6 @@
+#ifndef F_CPU
 #define F_CPU 16000000UL  // 16 MHz clock speed
+#endif
 
 #include <avr/io.h>
 #include <util/delay.h>
@@ -29,7 +31,7 @@ int main(void) {
     _delay_ms(1000);
 
     // Set all servos to center position (90 degrees)
-    for (uint8_t i = 0; i < 6; i++) {
+    for (uint8_t i = 0; i < NUM_SERVOS; i++) {
         pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, 90);
     }
 
@@ -50,7 +52,7 @@ int main(void) {
         button_t button = buttons_read();
 
         // Handle button presses
-        if (button == BUTTON_RIGHT && selected_servo < 5) {
+        if (button == BUTTON_RIGHT && selected_servo < (NUM_SERVOS - 1)) {
             selected_servo++;
             _delay_ms(200);
         }
@@ -78,7 +80,12 @@ int main(void) {
         // Update LCD display
         lcd_clear();
         lcd_print("Servo:");
-        lcd_putc(selected_servo + '0');  // Print servo number as character
+        // Print servo number in hex (0-9, A-F)
+        if (selected_servo < 10) {
+            lcd_putc(selected_servo + '0');
+        } else {
+            lcd_putc(selected_servo - 10 + 'A');
+        }
         lcd_print(" Ang:");
 
         // Display angle (simple integer display)
