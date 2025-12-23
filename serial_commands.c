@@ -33,12 +33,12 @@ static char* read_command_line(void) {
         // Wait for character (blocking)
         char c = uart_getc();
 
-        // Echo character back
-        uart_putc(c);
+        // Echo character back (disabled for fast burst sends)
+        // uart_putc(c);
 
         // Handle newline/carriage return
         if (c == '\n' || c == '\r') {
-            uart_putc('\n');  // Ensure newline
+            // uart_putc('\n');  // Disabled - no echo for fast sends
             cmd_buffer[cmd_index] = '\0';
             return cmd_buffer;
         }
@@ -47,7 +47,7 @@ static char* read_command_line(void) {
         if (c == '\b' || c == 127) {
             if (cmd_index > 0) {
                 cmd_index--;
-                uart_puts("\b \b");  // Erase character on terminal
+                // uart_puts("\b \b");  // Disabled - no echo for fast sends
             }
             continue;
         }
