@@ -2,20 +2,18 @@
 
 #include <avr/io.h>
 #include <util/delay.h>
+#include "lcd.h"
 
 int main(void) {
-    // Set PB5 (Arduino pin 13) as output
-    // PB5 is the built-in LED on Arduino Uno
-    DDRB |= (1 << PB5);
+    // Initialize LCD
+    lcd_ddr_out();
+    lcd_init();
+
+    // Print "hello" on the LCD
+    lcd_print("hello");
 
     while (1) {
-        // Turn LED on
-        PORTB |= (1 << PB5);
-        _delay_ms(1000);  // Wait 1 second
-
-        // Turn LED off
-        PORTB &= ~(1 << PB5);
-        _delay_ms(1000);  // Wait 1 second
+        // Keep running
     }
 
     return 0;
