@@ -5,9 +5,14 @@
  * Configures UART for 8 data bits, 1 stop bit, no parity
  */
 void uart_init(uint32_t baud) {
-    // Calculate baud rate register value
-    // UBRR = (F_CPU / (16 * baud)) - 1
-    uint16_t ubrr = (F_CPU / (16UL * baud)) - 1;
+    // Enable U2X (double-speed) mode for better baud rate accuracy
+    // This is what Arduino Serial.begin() does for 115200 baud at 16 MHz
+    UCSR0A = (1 << U2X0);
+
+    // Calculate baud rate register value for U2X mode
+    // UBRR = (F_CPU / (8 * baud)) - 1
+    // For 115200 baud: UBRR = 16, actual = 117647 baud, error = 2.1%
+    uint16_t ubrr = (F_CPU / (8UL * baud)) - 1;
 
     // Set baud rate
     UBRR0H = (uint8_t)(ubrr >> 8);
