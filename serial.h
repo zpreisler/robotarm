@@ -1,10 +1,10 @@
-#ifndef SERIAL_COMMANDS_H
-#define SERIAL_COMMANDS_H
+#ifndef SERIAL_H
+#define SERIAL_H
 
 #include <stdint.h>
 
 /*
- * Serial Command Interface for Robot Arm Control
+ * Serial Interface for Robot Arm Control
  *
  * Commands:
  * - START              : Enter serial control mode
@@ -31,9 +31,9 @@
 #define CMD_INVALID_ANGLE   5
 
 /**
- * Initialize serial command system
+ * Initialize serial interface
  */
-void serial_commands_init(void);
+void serial_init(void);
 
 /**
  * Enter serial control mode
@@ -60,4 +60,4 @@ uint8_t serial_check_start(void);
  */
 void serial_send_help(void);
 
-#endif /* SERIAL_COMMANDS_H */
+#endif /* SERIAL_H */

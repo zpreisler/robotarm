@@ -8,7 +8,7 @@
 #include "buttons.h"
 #include "pca9685.h"
 #include "uart.h"
-#include "serial_commands.h"
+#include "serial.h"
 #include "lcd_menu.h"
 #include "commands.h"
 
@@ -19,7 +19,7 @@ int main(void) {
     lcd_backlight_on();
     buttons_init();
     uart_init(UART_BAUD_115200);
-    serial_commands_init();
+    serial_init();
 
     // Initialize PCA9685 for servo control
     pca9685_init(PCA9685_DEFAULT_ADDRESS);

@@ -2,7 +2,7 @@
 #define LCD_MENU_H
 
 #include <stdint.h>
-#include "serial_commands.h"  // For NUM_SERVOS
+#include "serial.h"  // For NUM_SERVOS
 
 /**
  * LCD Menu System for Robot Arm Controller

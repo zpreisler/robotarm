@@ -1,4 +1,4 @@
-#include "serial_commands.h"
+#include "serial.h"
 #include "uart.h"
 #include "lcd.h"
 #include "commands.h"
@@ -10,9 +10,9 @@ static char cmd_buffer[CMD_BUFFER_SIZE];
 static uint8_t cmd_index = 0;
 
 /*
- * Initialize serial command system
+ * Initialize serial interface
  */
-void serial_commands_init(void) {
+void serial_init(void) {
     cmd_index = 0;
     memset(cmd_buffer, 0, CMD_BUFFER_SIZE);
 }
