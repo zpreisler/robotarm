@@ -88,6 +88,86 @@ static char value_to_hex(uint8_t value) {
 }
 
 /*
+ * Skip whitespace characters (space and tab)
+ * Advances pointer past any whitespace
+ */
+static void skip_whitespace(const char **p) {
+    while (**p == ' ' || **p == '\t') {
+        (*p)++;
+    }
+}
+
+/*
+ * Parse unsigned 16-bit integer from string
+ * Returns 1 on success, 0 on error (no digits found)
+ * Updates pointer to first non-digit character
+ */
+static uint8_t parse_uint16(const char **p, uint16_t *result) {
+    // Check if first character is a digit
+    if (**p < '0' || **p > '9') {
+        return 0;  // Error: no digit found
+    }
+
+    *result = 0;
+    while (**p >= '0' && **p <= '9') {
+        *result = *result * 10 + (**p - '0');
+        (*p)++;
+    }
+
+    return 1;  // Success
+}
+
+/*
+ * Skip comma separator with optional surrounding whitespace
+ * Returns 1 if at end of string (valid), 0 if unexpected character
+ */
+static uint8_t skip_comma(const char **p) {
+    skip_whitespace(p);
+
+    if (**p == ',') {
+        (*p)++;
+        return 1;
+    } else if (**p == '\0') {
+        return 1;  // End of string is valid
+    } else {
+        return 0;  // Unexpected character
+    }
+}
+
+/*
+ * Parse comma-separated list of angles
+ * Returns number of angles parsed (0 on error)
+ */
+static uint8_t parse_angle_list(const char **p, uint8_t *angles, uint8_t max_count) {
+    uint8_t count = 0;
+
+    while (**p != '\0' && count < max_count) {
+        skip_whitespace(p);
+        if (**p == '\0') break;
+
+        // Parse angle
+        uint16_t angle;
+        if (!parse_uint16(p, &angle)) {
+            return 0;  // Parse error
+        }
+
+        // Validate angle range
+        if (angle > 180) {
+            return 0;  // Invalid angle
+        }
+
+        angles[count++] = (uint8_t)angle;
+
+        // Skip comma or check for end
+        if (!skip_comma(p)) {
+            return 0;  // Unexpected character
+        }
+    }
+
+    return count;
+}
+
+/*
  * Parse and execute a servo command (S0:90 format)
  * Returns CMD_OK on success, error code otherwise
  */
@@ -116,16 +196,10 @@ static uint8_t execute_servo_command(const char *cmd) {
         return CMD_ERROR;
     }
 
-    // Parse angle (simple atoi)
-    uint16_t angle = 0;
+    // Parse angle
     const char *p = colon + 1;
-    while (*p >= '0' && *p <= '9') {
-        angle = angle * 10 + (*p - '0');
-        p++;
-    }
-
-    // Validate angle
-    if (angle > 180) {
+    uint16_t angle;
+    if (!parse_uint16(&p, &angle) || angle > 180) {
         return CMD_INVALID_ANGLE;
     }
 
@@ -189,49 +263,18 @@ static uint8_t execute_pose_command(const char *cmd) {
     }
 
     const char *p = cmd + 5;  // Skip "POSE "
-    uint8_t servo_index = 0;
+    uint8_t angles[NUM_SERVOS];
 
-    while (*p != '\0' && servo_index < NUM_SERVOS) {
-        // Skip whitespace
-        while (*p == ' ' || *p == '\t') {
-            p++;
-        }
-        if (*p == '\0') break;
-
-        // Parse angle
-        uint16_t angle = 0;
-        if (*p < '0' || *p > '9') {
-            return CMD_ERROR;  // Expected digit
-        }
-        while (*p >= '0' && *p <= '9') {
-            angle = angle * 10 + (*p - '0');
-            p++;
-        }
-
-        // Validate angle
-        if (angle > 180) {
-            return CMD_INVALID_ANGLE;
-        }
-
-        // Set servo position
-        pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, servo_index, (uint8_t)angle);
-        servo_angles[servo_index] = (uint8_t)angle;
-        servo_index++;
-
-        // Skip comma
-        while (*p == ' ' || *p == '\t') {
-            p++;
-        }
-        if (*p == ',') {
-            p++;
-        } else if (*p != '\0') {
-            return CMD_ERROR;  // Unexpected character
-        }
+    // Parse angle list
+    uint8_t num_servos = parse_angle_list(&p, angles, NUM_SERVOS);
+    if (num_servos == 0) {
+        return CMD_ERROR;  // Parse error or no angles
     }
 
-    // Must have set at least one servo
-    if (servo_index == 0) {
-        return CMD_ERROR;
+    // Set all servo positions
+    for (uint8_t i = 0; i < num_servos; i++) {
+        pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, angles[i]);
+        servo_angles[i] = angles[i];
     }
 
     return CMD_OK;
@@ -253,64 +296,18 @@ static uint8_t execute_move_command(const char *cmd) {
     const char *p = cmd + 5;  // Skip "MOVE "
 
     // Parse duration (milliseconds)
-    uint16_t duration_ms = 0;
-    while (*p == ' ' || *p == '\t') {
-        p++;
-    }
-    if (*p < '0' || *p > '9') {
-        return CMD_ERROR;  // Expected digit
-    }
-    while (*p >= '0' && *p <= '9') {
-        duration_ms = duration_ms * 10 + (*p - '0');
-        p++;
+    skip_whitespace(&p);
+    uint16_t duration_ms;
+    if (!parse_uint16(&p, &duration_ms)) {
+        return CMD_ERROR;
     }
 
     // Skip whitespace before angles
-    while (*p == ' ' || *p == '\t') {
-        p++;
-    }
+    skip_whitespace(&p);
 
     // Parse target angles
     uint8_t target_angles[NUM_SERVOS];
-    uint8_t num_servos = 0;
-
-    while (*p != '\0' && num_servos < NUM_SERVOS) {
-        // Skip whitespace
-        while (*p == ' ' || *p == '\t') {
-            p++;
-        }
-        if (*p == '\0') break;
-
-        // Parse angle
-        uint16_t angle = 0;
-        if (*p < '0' || *p > '9') {
-            return CMD_ERROR;  // Expected digit
-        }
-        while (*p >= '0' && *p <= '9') {
-            angle = angle * 10 + (*p - '0');
-            p++;
-        }
-
-        // Validate angle
-        if (angle > 180) {
-            return CMD_INVALID_ANGLE;
-        }
-
-        target_angles[num_servos] = (uint8_t)angle;
-        num_servos++;
-
-        // Skip comma
-        while (*p == ' ' || *p == '\t') {
-            p++;
-        }
-        if (*p == ',') {
-            p++;
-        } else if (*p != '\0') {
-            return CMD_ERROR;  // Unexpected character
-        }
-    }
-
-    // Must have at least one servo
+    uint8_t num_servos = parse_angle_list(&p, target_angles, NUM_SERVOS);
     if (num_servos == 0) {
         return CMD_ERROR;
     }
