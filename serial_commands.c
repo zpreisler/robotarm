@@ -319,6 +319,14 @@ static uint8_t execute_move_command(const char *cmd) {
         num_steps = 1;  // Minimum one step
     }
 
+    // Pre-calculate starting positions and deltas (optimization: calculate once, not every iteration)
+    int16_t start_angles[NUM_SERVOS];
+    int16_t deltas[NUM_SERVOS];
+    for (uint8_t i = 0; i < num_servos; i++) {
+        start_angles[i] = servo_angles[i];
+        deltas[i] = target_angles[i] - servo_angles[i];
+    }
+
     // Perform smooth interpolated movement
     for (uint16_t step = 0; step <= num_steps; step++) {
         // Calculate interpolation factor (0-1000 for fixed-point arithmetic)
@@ -326,13 +334,9 @@ static uint8_t execute_move_command(const char *cmd) {
 
         // Update each servo position
         for (uint8_t i = 0; i < num_servos; i++) {
-            int16_t current = servo_angles[i];
-            int16_t target = target_angles[i];
-            int16_t delta = target - current;
-
-            // Linear interpolation: current + delta * factor
+            // Linear interpolation: start + delta * factor
             // factor is 0-1000, so divide by 1000 after multiplication
-            int16_t new_angle = current + ((delta * (int32_t)factor) / 1000);
+            int16_t new_angle = start_angles[i] + ((deltas[i] * (int32_t)factor) / 1000);
 
             // Clamp to valid range
             if (new_angle < 0) new_angle = 0;
