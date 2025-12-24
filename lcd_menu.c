@@ -91,26 +91,24 @@ static void display_menu(void) {
 /* Display Mode 1: Motors (angle control) */
 static void display_motors(void) {
     lcd_clear();
-    lcd_print("M");
+    lcd_print("Motor ");
     lcd_putc(selected_servo + '0');
-    lcd_print(" Ang:");
-    lcd_print_number(cmd_get_servo_angle(selected_servo));
 
     lcd_set_cursor(0x40);
-    lcd_print("U/D=Srv L/R=Ang");
+    lcd_print("Angle: ");
+    lcd_print_number(cmd_get_servo_angle(selected_servo));
 }
 
 /* Display Mode 2: Calibration (PWM pulse width control) */
 static void display_calibration(void) {
     lcd_clear();
-    lcd_print("M");
+    lcd_print("Motor ");
     lcd_putc(selected_servo + '0');
-    lcd_print(" ");
-    lcd_print_number(cmd_get_servo_pwm_us(selected_servo));
-    lcd_print("us");
 
     lcd_set_cursor(0x40);
-    lcd_print("U/D=Srv L/R=us");
+    lcd_print("PWM: ");
+    lcd_print_number(cmd_get_servo_pwm_us(selected_servo));
+    lcd_print("us");
 }
 
 /* Display Mode 3: POSE */
@@ -119,17 +117,19 @@ static void display_pose(void) {
 
     if (selected_servo < NUM_SERVOS) {
         // Showing a servo
-        lcd_print("POSE M");
+        lcd_print("POSE Motor ");
         lcd_putc(selected_servo + '0');
-        lcd_print(":");
+
+        lcd_set_cursor(0x40);
+        lcd_print("Angle: ");
         lcd_print_number(temp_angles[selected_servo]);
     } else {
         // Execute option
-        lcd_print("POSE: Execute");
-    }
+        lcd_print("POSE");
 
-    lcd_set_cursor(0x40);
-    lcd_print("U/D=Nav L/R=Val");
+        lcd_set_cursor(0x40);
+        lcd_print("Execute");
+    }
 }
 
 /* Display Mode 4: MOVE */
@@ -138,22 +138,26 @@ static void display_move(void) {
 
     if (selected_servo == 0) {
         // Duration setting
-        lcd_print("MOVE Dur:");
+        lcd_print("MOVE Duration");
+
+        lcd_set_cursor(0x40);
         lcd_print_number(move_duration);
         lcd_print("ms");
     } else if (selected_servo <= NUM_SERVOS) {
         // Servo angle (selected_servo 1-6 maps to servo 0-5)
-        lcd_print("MOVE M");
+        lcd_print("MOVE Motor ");
         lcd_putc((selected_servo - 1) + '0');
-        lcd_print(":");
+
+        lcd_set_cursor(0x40);
+        lcd_print("Angle: ");
         lcd_print_number(temp_angles[selected_servo - 1]);
     } else {
         // Execute option
-        lcd_print("MOVE: Execute");
-    }
+        lcd_print("MOVE");
 
-    lcd_set_cursor(0x40);
-    lcd_print("U/D=Nav L/R=Val");
+        lcd_set_cursor(0x40);
+        lcd_print("Execute");
+    }
 }
 
 /* Execute POSE command */
