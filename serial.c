@@ -21,8 +21,10 @@ void serial_init(void) {
  * Read a complete command line
  * Blocks until newline received or buffer full
  * Returns pointer to command string
+ * enable_echo: if 1, echo characters back to terminal (for interactive use)
  */
-static char* read_command_line(void) {
+
+static char* read_command_line(uint8_t enable_echo) {
     cmd_index = 0;
     memset(cmd_buffer, 0, CMD_BUFFER_SIZE);
 
@@ -30,32 +32,47 @@ static char* read_command_line(void) {
         // Wait for character (blocking)
         char c = uart_getc();
 
-        // Echo character back (disabled for fast burst sends)
-        // uart_putc(c);
+        // 1. Ignore NULL characters and common noise
+        if (c == '\0') continue;
 
-        // Handle newline/carriage return
+        // 2. Handle newline/carriage return
         if (c == '\n' || c == '\r') {
-            // uart_putc('\n');  // Disabled - no echo for fast sends
-            cmd_buffer[cmd_index] = '\0';
-            return cmd_buffer;
+            // Only return if the buffer isn't empty.
+            // This filters out the second half of \r\n and accidental empty sends.
+            if (cmd_index > 0) {
+                cmd_buffer[cmd_index] = '\0';
+                if (enable_echo) {
+                    uart_puts("\n");  // Echo newline
+                }
+                return cmd_buffer;
+            }
+            // If the buffer is empty, just keep waiting for real text
+            continue;
         }
 
-        // Handle backspace
+        // 3. Handle backspace
         if (c == '\b' || c == 127) {
             if (cmd_index > 0) {
                 cmd_index--;
-                // uart_puts("\b \b");  // Disabled - no echo for fast sends
+                if (enable_echo) {
+                    uart_puts("\b \b");  // Erase character on terminal
+                }
             }
             continue;
         }
 
-        // Add to buffer if space available
-        if (cmd_index < CMD_BUFFER_SIZE - 1) {
-            cmd_buffer[cmd_index++] = c;
+        // 4. Add to buffer if it's a valid printable character
+        // (ASCII 32 ' ' through 126 '~')
+        if (c >= 32 && c <= 126) {
+            if (cmd_index < CMD_BUFFER_SIZE - 1) {
+                cmd_buffer[cmd_index++] = c;
+                if (enable_echo) {
+                    uart_putc(c);  // Echo character back
+                }
+            }
         }
     }
 }
-
 /*
  * Parse hex digit (0-9, A-F, a-f) to value
  * Returns 0-15 on success, 0xFF on error
@@ -389,7 +406,6 @@ static uint8_t process_command(const char *cmd) {
 
     // STOP command - exit serial mode
     if (strcmp(cmd, "STOP") == 0 || strcmp(cmd, "stop") == 0) {
-        uart_puts("Exiting serial mode\n");
         return CMD_EXIT;
     }
 
@@ -506,10 +522,8 @@ static uint8_t process_command(const char *cmd) {
  * Blocking function that processes commands until STOP is received
  */
 void serial_mode(void) {
-    // Send welcome message
-    uart_puts("\n=== SERIAL MODE ACTIVE ===\n");
-    uart_puts("Type HELP for command list\n");
-    uart_puts("Type STOP to exit\n\n");
+    // Send simple confirmation
+    uart_puts("OK\n");
 
     // Update LCD
     lcd_clear();
@@ -517,10 +531,11 @@ void serial_mode(void) {
 
     // Main command loop
     while (1) {
-        uart_puts("> ");  // Prompt
+        // Send prompt for interactive use
+        uart_puts("> ");
 
-        // Read command
-        char *cmd = read_command_line();
+        // Read command with echo enabled for interactive use
+        char *cmd = read_command_line(1);
 
         // Process command
         uint8_t result = process_command(cmd);
@@ -531,8 +546,8 @@ void serial_mode(void) {
         }
     }
 
-    // Exiting serial mode
-    uart_puts("\n=== BUTTON MODE ACTIVE ===\n");
+    // Exiting serial mode - simple confirmation
+    uart_puts("OK\n");
     lcd_clear();
     lcd_print("Button Mode");
     _delay_ms(500);
@@ -541,26 +556,82 @@ void serial_mode(void) {
 /*
  * Check if START command was received
  * Non-blocking check for entering serial mode
+ * Accumulates characters until newline, then checks for START
  */
 uint8_t serial_check_start(void) {
-    if (!uart_available()) {
-        return 0;
-    }
+    // Static buffer for accumulating characters in button mode
+    static char start_buffer[CMD_BUFFER_SIZE] = {0};
+    static uint8_t start_index = 0;
 
-    // Read the command
-    char *cmd = read_command_line();
+    // Read ALL available characters to avoid buffer overflow
+    // This is safe because we check uart_available() before each read
+    while (uart_available()) {
+        char c = uart_getc();
 
-    // Check if it's START
-    if (strcmp(cmd, "START") == 0 || strcmp(cmd, "start") == 0) {
-        return 1;
-    }
+        // Ignore NULL characters
+        if (c == '\0') {
+            continue;
+        }
 
-    // Not START, could be HELP
-    if (strcmp(cmd, "HELP") == 0 || strcmp(cmd, "help") == 0) {
-        serial_send_help();
-        uart_puts("\nType START to enter serial mode\n");
-    } else {
-        uart_puts("Type START to enter serial mode\n");
+        // Handle newline/carriage return - command complete
+        if (c == '\n' || c == '\r') {
+            if (start_index > 0) {
+                start_buffer[start_index] = '\0';
+
+                // DEBUG: Show what we received with length and hex codes
+                uart_puts("DEBUG: Received [");
+                uart_puts(start_buffer);
+                uart_puts("] len=");
+                // Print length as decimal
+                uint8_t len = start_index;
+                if (len >= 10) uart_putc((len / 10) + '0');
+                uart_putc((len % 10) + '0');
+                uart_puts(" hex=");
+                // Print first few chars as hex
+                for (uint8_t i = 0; i < len && i < 10; i++) {
+                    uint8_t val = (uint8_t)start_buffer[i];
+                    uart_putc((val >> 4) < 10 ? ((val >> 4) + '0') : ((val >> 4) - 10 + 'A'));
+                    uart_putc((val & 0x0F) < 10 ? ((val & 0x0F) + '0') : ((val & 0x0F) - 10 + 'A'));
+                    uart_putc(' ');
+                }
+                uart_puts("\n");
+
+                // Check if it's START
+                if (strcmp(start_buffer, "START") == 0 || strcmp(start_buffer, "start") == 0) {
+                    start_index = 0;  // Reset for next time
+                    memset(start_buffer, 0, CMD_BUFFER_SIZE);
+                    return 1;
+                }
+
+                // Check if it's HELP
+                if (strcmp(start_buffer, "HELP") == 0 || strcmp(start_buffer, "help") == 0) {
+                    serial_send_help();
+                    uart_puts("\nType START to enter serial mode\n");
+                } else {
+                    uart_puts("Type START to enter serial mode\n");
+                }
+
+                // Reset buffer for next command
+                start_index = 0;
+                memset(start_buffer, 0, CMD_BUFFER_SIZE);
+            }
+            continue;
+        }
+
+        // Handle backspace
+        if (c == '\b' || c == 127) {
+            if (start_index > 0) {
+                start_index--;
+            }
+            continue;
+        }
+
+        // Add printable characters to buffer
+        if (c >= 32 && c <= 126) {
+            if (start_index < CMD_BUFFER_SIZE - 1) {
+                start_buffer[start_index++] = c;
+            }
+        }
     }
 
     return 0;

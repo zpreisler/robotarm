@@ -18,7 +18,7 @@ int main(void) {
     lcd_init();
     lcd_backlight_on();
     buttons_init();
-    uart_init(UART_BAUD_115200);
+    uart_init(UART_BAUD_9600);
     serial_init();
 
     // Initialize PCA9685 for servo control
@@ -40,6 +40,7 @@ int main(void) {
 
     while (1) {
         // Check for serial START command
+        // With interrupt-driven UART, no need for fast polling!
         if (serial_check_start()) {
             // Enter serial mode (blocking until STOP command)
             serial_mode();

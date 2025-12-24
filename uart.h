@@ -24,7 +24,7 @@
 
 /* Default baud rate */
 #ifndef UART_BAUD
-#define UART_BAUD UART_BAUD_115200
+#define UART_BAUD UART_BAUD_9600
 #endif
 
 /* Function declarations */
