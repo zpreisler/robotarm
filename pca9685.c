@@ -101,14 +101,14 @@ void pca9685_set_servo_angle(uint8_t address, uint8_t channel, uint8_t angle) {
     uint16_t pulse_us = SERVO_MIN_PULSE + ((uint32_t)angle * (SERVO_MAX_PULSE - SERVO_MIN_PULSE) / 180);
 
     // Set servo pulse
-    pca9685_set_servo_pulse(address, channel, pulse_us);
+    pca9685_set_servo_pwm_us(address, channel, pulse_us);
 }
 
 /*
  * Set servo pulse width in microseconds
  * Converts microseconds to 12-bit PWM value
  */
-void pca9685_set_servo_pulse(uint8_t address, uint8_t channel, uint16_t pulse_us) {
+void pca9685_set_servo_pwm_us(uint8_t address, uint8_t channel, uint16_t pulse_us) {
     // At 50Hz, period = 20000 microseconds
     // PWM resolution = 4096 steps
     // PWM_value = (pulse_us * 4096) / 20000
@@ -125,10 +125,10 @@ void pca9685_set_servo_pulse(uint8_t address, uint8_t channel, uint16_t pulse_us
 }
 
 /*
- * Set servo PWM value directly (for calibration)
+ * Set servo PWM value directly (raw 12-bit value)
  * Bypasses angle/pulse conversion for direct hardware control
  */
-void pca9685_set_servo_pwm(uint8_t address, uint8_t channel, uint16_t pwm_value) {
+void pca9685_set_servo_pwm_raw(uint8_t address, uint8_t channel, uint16_t pwm_value) {
     // Limit to 12-bit value
     if (pwm_value > 4095) {
         pwm_value = 4095;

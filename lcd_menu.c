@@ -1,7 +1,7 @@
 #include "lcd_menu.h"
 #include "lcd.h"
 #include "buttons.h"
-#include "pca9685.h"
+#include "commands.h"
 #include <util/delay.h>
 
 /* Menu states */
@@ -25,9 +25,10 @@ typedef enum {
 static menu_state_t current_state = STATE_MENU;
 static uint8_t menu_selection = 0;
 static uint8_t selected_servo = 0;
-static uint8_t servo_angles[NUM_SERVOS] = {90, 90, 90, 90, 90, 90};
-static uint16_t servo_pwm_values[NUM_SERVOS] = {307, 307, 307, 307, 307, 307};  // ~1500us
-static uint16_t move_duration = 1000;  // Duration in ms
+static uint16_t move_duration = 1000;  // Duration in ms for MOVE command
+
+/* Temporary arrays for POSE/MOVE editing (supports up to 16 servos) */
+static uint8_t temp_angles[16];
 
 /* Helper function to print a number on LCD */
 static void lcd_print_number(uint16_t num) {
@@ -75,22 +76,23 @@ static void display_motors(void) {
     lcd_print("M");
     lcd_putc(selected_servo + '0');
     lcd_print(" Ang:");
-    lcd_print_number(servo_angles[selected_servo]);
+    lcd_print_number(cmd_get_servo_angle(selected_servo));
 
     lcd_set_cursor(0x40);
     lcd_print("L/R=Srv U/D=Ang");
 }
 
-/* Display Mode 2: Calibration (PWM control) */
+/* Display Mode 2: Calibration (PWM pulse width control) */
 static void display_calibration(void) {
     lcd_clear();
     lcd_print("M");
     lcd_putc(selected_servo + '0');
-    lcd_print(" PWM:");
-    lcd_print_number(servo_pwm_values[selected_servo]);
+    lcd_print(" ");
+    lcd_print_number(cmd_get_servo_pwm_us(selected_servo));
+    lcd_print("us");
 
     lcd_set_cursor(0x40);
-    lcd_print("L/R=Srv U/D=PWM");
+    lcd_print("L/R=Srv U/D=us");
 }
 
 /* Display Mode 3: POSE */
@@ -99,7 +101,7 @@ static void display_pose(void) {
     lcd_print("POSE M");
     lcd_putc(selected_servo + '0');
     lcd_print(":");
-    lcd_print_number(servo_angles[selected_servo]);
+    lcd_print_number(temp_angles[selected_servo]);
 
     lcd_set_cursor(0x40);
     lcd_print("L/R=Srv SEL=Exec");
@@ -121,7 +123,7 @@ static void display_move_angles(void) {
     lcd_print("MOVE M");
     lcd_putc(selected_servo + '0');
     lcd_print(":");
-    lcd_print_number(servo_angles[selected_servo]);
+    lcd_print_number(temp_angles[selected_servo]);
 
     lcd_set_cursor(0x40);
     lcd_print("L/R=Srv SEL=Exec");
@@ -129,9 +131,7 @@ static void display_move_angles(void) {
 
 /* Execute POSE command */
 static void execute_pose(void) {
-    for (uint8_t i = 0; i < NUM_SERVOS; i++) {
-        pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, servo_angles[i]);
-    }
+    cmd_execute_pose(temp_angles, NUM_SERVOS);
 
     lcd_clear();
     lcd_print("POSE Executed!");
@@ -140,46 +140,10 @@ static void execute_pose(void) {
 
 /* Execute MOVE command */
 static void execute_move(void) {
-    // Calculate number of interpolation steps (20ms per step)
-    #define MOVE_STEP_DELAY_MS 20
-    uint16_t num_steps = move_duration / MOVE_STEP_DELAY_MS;
-    if (num_steps == 0) {
-        num_steps = 1;
-    }
-
-    // Get current positions
-    uint8_t start_angles[NUM_SERVOS];
-    for (uint8_t i = 0; i < NUM_SERVOS; i++) {
-        start_angles[i] = servo_angles[i];  // Use stored angles as current
-    }
-
-    // Calculate deltas
-    int16_t deltas[NUM_SERVOS];
-    for (uint8_t i = 0; i < NUM_SERVOS; i++) {
-        deltas[i] = servo_angles[i] - start_angles[i];
-    }
-
-    // Show progress
     lcd_clear();
     lcd_print("Moving...");
 
-    // Perform smooth interpolated movement
-    for (uint16_t step = 0; step <= num_steps; step++) {
-        uint16_t factor = (step * 1000UL) / num_steps;
-
-        for (uint8_t i = 0; i < NUM_SERVOS; i++) {
-            int16_t new_angle = start_angles[i] + ((deltas[i] * (int32_t)factor) / 1000);
-
-            if (new_angle < 0) new_angle = 0;
-            if (new_angle > 180) new_angle = 180;
-
-            pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, (uint8_t)new_angle);
-        }
-
-        if (step < num_steps) {
-            _delay_ms(MOVE_STEP_DELAY_MS);
-        }
-    }
+    cmd_execute_move(move_duration, temp_angles, NUM_SERVOS);
 
     lcd_clear();
     lcd_print("MOVE Complete!");
@@ -192,10 +156,9 @@ void lcd_menu_init(void) {
     menu_selection = 0;
     selected_servo = 0;
 
-    // Initialize all servos to center
+    // Initialize temp angles from current servo positions
     for (uint8_t i = 0; i < NUM_SERVOS; i++) {
-        servo_angles[i] = 90;
-        servo_pwm_values[i] = 307;  // Approximately 1500us
+        temp_angles[i] = cmd_get_servo_angle(i);
     }
 
     display_menu();
@@ -259,24 +222,28 @@ uint8_t lcd_menu_update(void) {
             display_motors();
             _delay_ms(200);
         }
-        else if (button == BUTTON_UP && servo_angles[selected_servo] < 180) {
-            servo_angles[selected_servo] += 5;
-            if (servo_angles[selected_servo] > 180) {
-                servo_angles[selected_servo] = 180;
+        else if (button == BUTTON_UP) {
+            uint8_t angle = cmd_get_servo_angle(selected_servo);
+            if (angle < 180) {
+                angle += 5;
+                if (angle > 180) {
+                    angle = 180;
+                }
+                cmd_set_servo_angle(selected_servo, angle);
             }
-            pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, selected_servo,
-                                   servo_angles[selected_servo]);
             display_motors();
             _delay_ms(100);
         }
-        else if (button == BUTTON_DOWN && servo_angles[selected_servo] > 0) {
-            if (servo_angles[selected_servo] >= 5) {
-                servo_angles[selected_servo] -= 5;
-            } else {
-                servo_angles[selected_servo] = 0;
+        else if (button == BUTTON_DOWN) {
+            uint8_t angle = cmd_get_servo_angle(selected_servo);
+            if (angle > 0) {
+                if (angle >= 5) {
+                    angle -= 5;
+                } else {
+                    angle = 0;
+                }
+                cmd_set_servo_angle(selected_servo, angle);
             }
-            pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, selected_servo,
-                                   servo_angles[selected_servo]);
             display_motors();
             _delay_ms(100);
         }
@@ -300,24 +267,28 @@ uint8_t lcd_menu_update(void) {
             display_calibration();
             _delay_ms(200);
         }
-        else if (button == BUTTON_UP && servo_pwm_values[selected_servo] < 4095) {
-            servo_pwm_values[selected_servo] += 10;
-            if (servo_pwm_values[selected_servo] > 4095) {
-                servo_pwm_values[selected_servo] = 4095;
+        else if (button == BUTTON_UP) {
+            uint16_t pulse_us = cmd_get_servo_pwm_us(selected_servo);
+            if (pulse_us < 20000) {
+                pulse_us += 10;
+                if (pulse_us > 20000) {
+                    pulse_us = 20000;
+                }
+                cmd_set_servo_pwm_us(selected_servo, pulse_us);
             }
-            pca9685_set_servo_pwm(PCA9685_DEFAULT_ADDRESS, selected_servo,
-                                 servo_pwm_values[selected_servo]);
             display_calibration();
             _delay_ms(100);
         }
-        else if (button == BUTTON_DOWN && servo_pwm_values[selected_servo] > 0) {
-            if (servo_pwm_values[selected_servo] >= 10) {
-                servo_pwm_values[selected_servo] -= 10;
-            } else {
-                servo_pwm_values[selected_servo] = 0;
+        else if (button == BUTTON_DOWN) {
+            uint16_t pulse_us = cmd_get_servo_pwm_us(selected_servo);
+            if (pulse_us > 0) {
+                if (pulse_us >= 10) {
+                    pulse_us -= 10;
+                } else {
+                    pulse_us = 0;
+                }
+                cmd_set_servo_pwm_us(selected_servo, pulse_us);
             }
-            pca9685_set_servo_pwm(PCA9685_DEFAULT_ADDRESS, selected_servo,
-                                 servo_pwm_values[selected_servo]);
             display_calibration();
             _delay_ms(100);
         }
@@ -341,19 +312,19 @@ uint8_t lcd_menu_update(void) {
             display_pose();
             _delay_ms(200);
         }
-        else if (button == BUTTON_UP && servo_angles[selected_servo] < 180) {
-            servo_angles[selected_servo] += 5;
-            if (servo_angles[selected_servo] > 180) {
-                servo_angles[selected_servo] = 180;
+        else if (button == BUTTON_UP && temp_angles[selected_servo] < 180) {
+            temp_angles[selected_servo] += 5;
+            if (temp_angles[selected_servo] > 180) {
+                temp_angles[selected_servo] = 180;
             }
             display_pose();
             _delay_ms(100);
         }
-        else if (button == BUTTON_DOWN && servo_angles[selected_servo] > 0) {
-            if (servo_angles[selected_servo] >= 5) {
-                servo_angles[selected_servo] -= 5;
+        else if (button == BUTTON_DOWN && temp_angles[selected_servo] > 0) {
+            if (temp_angles[selected_servo] >= 5) {
+                temp_angles[selected_servo] -= 5;
             } else {
-                servo_angles[selected_servo] = 0;
+                temp_angles[selected_servo] = 0;
             }
             display_pose();
             _delay_ms(100);
@@ -406,19 +377,19 @@ uint8_t lcd_menu_update(void) {
             display_move_angles();
             _delay_ms(200);
         }
-        else if (button == BUTTON_UP && servo_angles[selected_servo] < 180) {
-            servo_angles[selected_servo] += 5;
-            if (servo_angles[selected_servo] > 180) {
-                servo_angles[selected_servo] = 180;
+        else if (button == BUTTON_UP && temp_angles[selected_servo] < 180) {
+            temp_angles[selected_servo] += 5;
+            if (temp_angles[selected_servo] > 180) {
+                temp_angles[selected_servo] = 180;
             }
             display_move_angles();
             _delay_ms(100);
         }
-        else if (button == BUTTON_DOWN && servo_angles[selected_servo] > 0) {
-            if (servo_angles[selected_servo] >= 5) {
-                servo_angles[selected_servo] -= 5;
+        else if (button == BUTTON_DOWN && temp_angles[selected_servo] > 0) {
+            if (temp_angles[selected_servo] >= 5) {
+                temp_angles[selected_servo] -= 5;
             } else {
-                servo_angles[selected_servo] = 0;
+                temp_angles[selected_servo] = 0;
             }
             display_move_angles();
             _delay_ms(100);

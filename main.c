@@ -10,6 +10,7 @@
 #include "uart.h"
 #include "serial_commands.h"
 #include "lcd_menu.h"
+#include "commands.h"
 
 int main(void) {
     // Initialize all systems
@@ -31,10 +32,8 @@ int main(void) {
     uart_puts("Or use buttons for menu control\n\n");
     _delay_ms(1000);
 
-    // Set all servos to center position (90 degrees)
-    for (uint8_t i = 0; i < NUM_SERVOS; i++) {
-        pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, 90);
-    }
+    // Initialize command system (sets all servos to center position)
+    cmd_init();
 
     // Initialize LCD menu system
     lcd_menu_init();

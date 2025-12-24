@@ -1,16 +1,13 @@
 #include "serial_commands.h"
 #include "uart.h"
 #include "lcd.h"
-#include "pca9685.h"
+#include "commands.h"
 #include <string.h>
 #include <util/delay.h>
 
 /* Command buffer */
 static char cmd_buffer[CMD_BUFFER_SIZE];
 static uint8_t cmd_index = 0;
-
-/* Current servo angles (for GET command) */
-static uint8_t servo_angles[16] = {90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90, 90};  // Default 90° for all 16 channels
 
 /*
  * Initialize serial command system
@@ -204,10 +201,7 @@ static uint8_t execute_servo_command(const char *cmd) {
     }
 
     // Execute command
-    pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, channel, (uint8_t)angle);
-
-    // Store angle for GET command
-    servo_angles[channel] = (uint8_t)angle;
+    cmd_set_servo_angle(channel, (uint8_t)angle);
 
     return CMD_OK;
 }
@@ -236,7 +230,7 @@ static uint8_t execute_get_command(const char *cmd) {
     uart_puts(": ");
 
     // Send angle (simple integer to string)
-    uint8_t angle = servo_angles[channel];
+    uint8_t angle = cmd_get_servo_angle(channel);
     if (angle >= 100) {
         uart_putc((angle / 100) + '0');
     }
@@ -271,11 +265,8 @@ static uint8_t execute_pose_command(const char *cmd) {
         return CMD_ERROR;  // Parse error or no angles
     }
 
-    // Set all servo positions
-    for (uint8_t i = 0; i < num_servos; i++) {
-        pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, angles[i]);
-        servo_angles[i] = angles[i];
-    }
+    // Execute POSE command
+    cmd_execute_pose(angles, num_servos);
 
     return CMD_OK;
 }
@@ -312,49 +303,8 @@ static uint8_t execute_move_command(const char *cmd) {
         return CMD_ERROR;
     }
 
-    // Calculate number of interpolation steps (20ms per step)
-    #define MOVE_STEP_DELAY_MS 20
-    uint16_t num_steps = duration_ms / MOVE_STEP_DELAY_MS;
-    if (num_steps == 0) {
-        num_steps = 1;  // Minimum one step
-    }
-
-    // Pre-calculate starting positions and deltas (optimization: calculate once, not every iteration)
-    int16_t start_angles[NUM_SERVOS];
-    int16_t deltas[NUM_SERVOS];
-    for (uint8_t i = 0; i < num_servos; i++) {
-        start_angles[i] = servo_angles[i];
-        deltas[i] = target_angles[i] - servo_angles[i];
-    }
-
-    // Perform smooth interpolated movement
-    for (uint16_t step = 0; step <= num_steps; step++) {
-        // Calculate interpolation factor (0-1000 for fixed-point arithmetic)
-        uint16_t factor = (step * 1000UL) / num_steps;
-
-        // Update each servo position
-        for (uint8_t i = 0; i < num_servos; i++) {
-            // Linear interpolation: start + delta * factor
-            // factor is 0-1000, so divide by 1000 after multiplication
-            int16_t new_angle = start_angles[i] + ((deltas[i] * (int32_t)factor) / 1000);
-
-            // Clamp to valid range
-            if (new_angle < 0) new_angle = 0;
-            if (new_angle > 180) new_angle = 180;
-
-            pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, (uint8_t)new_angle);
-        }
-
-        // Don't delay after the last step
-        if (step < num_steps) {
-            _delay_ms(MOVE_STEP_DELAY_MS);
-        }
-    }
-
-    // Update stored angles to final positions
-    for (uint8_t i = 0; i < num_servos; i++) {
-        servo_angles[i] = target_angles[i];
-    }
+    // Execute MOVE command
+    cmd_execute_move(duration_ms, target_angles, num_servos);
 
     return CMD_OK;
 }
