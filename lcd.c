@@ -53,7 +53,7 @@ void lcd_display_on(){
 
 	lcd_pulse();
 
-	PORTD |= 0b11110000; // D7,D6,D5,D4 high
+	PORTD |= 0b11000000; // D7,D6 high (0x0C: Display ON, Cursor OFF, Blink OFF)
 	lcd_pulse();
 }
 
