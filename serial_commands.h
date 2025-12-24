@@ -7,12 +7,13 @@
  * Serial Command Interface for Robot Arm Control
  *
  * Commands:
- * - START         : Enter serial control mode
- * - STOP          : Exit serial control mode
- * - S<n>:<angle>  : Set servo n to angle (n=0-F hex, e.g., S0:90, SA:120)
- * - POSE <angles> : Set multiple servos (e.g., POSE 90,45,120,90,60,30)
- * - GET <n>       : Query servo n position (n=0-F hex)
- * - HELP          : List available commands
+ * - START              : Enter serial control mode
+ * - STOP               : Exit serial control mode
+ * - S<n>:<angle>       : Set servo n to angle (n=0-F hex, e.g., S0:90, SA:120)
+ * - POSE <angles>      : Set multiple servos instantly (e.g., POSE 90,45,120,90,60,30)
+ * - MOVE <ms> <angles> : Smooth move to angles over duration (e.g., MOVE 2000 90,45,120)
+ * - GET <n>            : Query servo n position (n=0-F hex)
+ * - HELP               : List available commands
  */
 
 /* Configuration */

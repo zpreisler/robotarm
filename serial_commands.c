@@ -238,22 +238,147 @@ static uint8_t execute_pose_command(const char *cmd) {
 }
 
 /*
+ * Execute MOVE command (smooth interpolated movement)
+ * Format: MOVE <duration_ms> <angle1>,<angle2>,...
+ * Smoothly moves servos to target positions over specified duration
+ * All servos finish at the same time (synchronized linear interpolation)
+ */
+static uint8_t execute_move_command(const char *cmd) {
+    // Expected format: MOVE <duration> <angle1>,<angle2>,...
+    // Skip "MOVE " (5 characters)
+    if (strlen(cmd) < 7) {  // Minimum: "MOVE 0 0"
+        return CMD_ERROR;
+    }
+
+    const char *p = cmd + 5;  // Skip "MOVE "
+
+    // Parse duration (milliseconds)
+    uint16_t duration_ms = 0;
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+    if (*p < '0' || *p > '9') {
+        return CMD_ERROR;  // Expected digit
+    }
+    while (*p >= '0' && *p <= '9') {
+        duration_ms = duration_ms * 10 + (*p - '0');
+        p++;
+    }
+
+    // Skip whitespace before angles
+    while (*p == ' ' || *p == '\t') {
+        p++;
+    }
+
+    // Parse target angles
+    uint8_t target_angles[NUM_SERVOS];
+    uint8_t num_servos = 0;
+
+    while (*p != '\0' && num_servos < NUM_SERVOS) {
+        // Skip whitespace
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+        if (*p == '\0') break;
+
+        // Parse angle
+        uint16_t angle = 0;
+        if (*p < '0' || *p > '9') {
+            return CMD_ERROR;  // Expected digit
+        }
+        while (*p >= '0' && *p <= '9') {
+            angle = angle * 10 + (*p - '0');
+            p++;
+        }
+
+        // Validate angle
+        if (angle > 180) {
+            return CMD_INVALID_ANGLE;
+        }
+
+        target_angles[num_servos] = (uint8_t)angle;
+        num_servos++;
+
+        // Skip comma
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+        if (*p == ',') {
+            p++;
+        } else if (*p != '\0') {
+            return CMD_ERROR;  // Unexpected character
+        }
+    }
+
+    // Must have at least one servo
+    if (num_servos == 0) {
+        return CMD_ERROR;
+    }
+
+    // Calculate number of interpolation steps (20ms per step)
+    #define MOVE_STEP_DELAY_MS 20
+    uint16_t num_steps = duration_ms / MOVE_STEP_DELAY_MS;
+    if (num_steps == 0) {
+        num_steps = 1;  // Minimum one step
+    }
+
+    // Perform smooth interpolated movement
+    for (uint16_t step = 0; step <= num_steps; step++) {
+        // Calculate interpolation factor (0-1000 for fixed-point arithmetic)
+        uint16_t factor = (step * 1000UL) / num_steps;
+
+        // Update each servo position
+        for (uint8_t i = 0; i < num_servos; i++) {
+            int16_t current = servo_angles[i];
+            int16_t target = target_angles[i];
+            int16_t delta = target - current;
+
+            // Linear interpolation: current + delta * factor
+            // factor is 0-1000, so divide by 1000 after multiplication
+            int16_t new_angle = current + ((delta * (int32_t)factor) / 1000);
+
+            // Clamp to valid range
+            if (new_angle < 0) new_angle = 0;
+            if (new_angle > 180) new_angle = 180;
+
+            pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, (uint8_t)new_angle);
+        }
+
+        // Don't delay after the last step
+        if (step < num_steps) {
+            _delay_ms(MOVE_STEP_DELAY_MS);
+        }
+    }
+
+    // Update stored angles to final positions
+    for (uint8_t i = 0; i < num_servos; i++) {
+        servo_angles[i] = target_angles[i];
+    }
+
+    return CMD_OK;
+}
+
+/*
  * Send help message
  */
 void serial_send_help(void) {
     uart_puts("\n=== Robot Arm Serial Commands ===\n");
-    uart_puts("START          - Enter serial control mode\n");
-    uart_puts("STOP           - Exit serial control mode\n");
-    uart_puts("S<n>:<angle>   - Set servo n to angle (0-180)\n");
-    uart_puts("                 n = 0-9,A-F (hex)\n");
-    uart_puts("                 Example: S0:90, S5:45, SA:120\n");
-    uart_puts("POSE <angles>  - Set multiple servos at once\n");
-    uart_puts("                 Example: POSE 90,45,120,90,60,30\n");
-    uart_puts("                 Sets servos 0,1,2,3,4,5\n");
-    uart_puts("GET <n>        - Query servo n position\n");
-    uart_puts("                 Example: GET 0, GET A\n");
-    uart_puts("HELP           - Show this help message\n");
-    uart_puts("===================================\n");
+    uart_puts("START              - Enter serial control mode\n");
+    uart_puts("STOP               - Exit serial control mode\n");
+    uart_puts("S<n>:<angle>       - Set servo n to angle (0-180)\n");
+    uart_puts("                     n = 0-9,A-F (hex)\n");
+    uart_puts("                     Example: S0:90, S5:45, SA:120\n");
+    uart_puts("POSE <angles>      - Set multiple servos instantly\n");
+    uart_puts("                     Example: POSE 90,45,120,90,60,30\n");
+    uart_puts("                     Sets servos 0,1,2,3,4,5\n");
+    uart_puts("MOVE <ms> <angles> - Smooth move over duration (ms)\n");
+    uart_puts("                     Example: MOVE 2000 90,45,120,90,60,30\n");
+    uart_puts("                     Moves to angles over 2 seconds\n");
+    uart_puts("                     All servos finish simultaneously\n");
+    uart_puts("GET <n>            - Query servo n position\n");
+    uart_puts("                     Example: GET 0, GET A\n");
+    uart_puts("HELP               - Show this help message\n");
+    uart_puts("=====================================\n");
 }
 
 /*
@@ -326,6 +451,28 @@ static uint8_t process_command(const char *cmd) {
                 break;
             default:
                 uart_puts("ERROR: Invalid POSE format\n");
+                break;
+        }
+        return CMD_OK;
+    }
+
+    // MOVE command
+    if (strncmp(cmd, "MOVE ", 5) == 0 || strncmp(cmd, "move ", 5) == 0) {
+        uint8_t result = execute_move_command(cmd);
+        switch (result) {
+            case CMD_OK:
+                uart_puts("OK\n");
+                break;
+            case CMD_INVALID_SERVO:
+                uart_puts("ERROR: Too many servos (max ");
+                uart_putc(value_to_hex(NUM_SERVOS - 1));
+                uart_puts(")\n");
+                break;
+            case CMD_INVALID_ANGLE:
+                uart_puts("ERROR: Invalid angle (must be 0-180)\n");
+                break;
+            default:
+                uart_puts("ERROR: Invalid MOVE format\n");
                 break;
         }
         return CMD_OK;
