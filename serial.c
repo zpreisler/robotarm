@@ -207,6 +207,48 @@ static uint8_t execute_servo_command(const char *cmd) {
 }
 
 /*
+ * Parse and execute a PWM command (P0:1500 format)
+ * Returns CMD_OK on success, error code otherwise
+ */
+static uint8_t execute_pwm_command(const char *cmd) {
+    // Expected format: P<channel>:<pulse_us>
+    // Example: P0:1500, P1:1000, PA:2000 (hex: 0-9, A-F for channels 0-15)
+
+    // Check minimum length and format
+    if (strlen(cmd) < 4) {  // Minimum: "P0:0"
+        return CMD_ERROR;
+    }
+
+    if (cmd[0] != 'P' && cmd[0] != 'p') {
+        return CMD_UNKNOWN;
+    }
+
+    // Parse servo channel (hex digit: 0-9, A-F)
+    uint8_t channel = parse_hex_digit(cmd[1]);
+    if (channel == 0xFF || channel >= NUM_SERVOS) {
+        return CMD_INVALID_SERVO;
+    }
+
+    // Find colon separator
+    const char *colon = strchr(cmd, ':');
+    if (!colon) {
+        return CMD_ERROR;
+    }
+
+    // Parse pulse width (0-20000 microseconds)
+    const char *p = colon + 1;
+    uint16_t pulse_us;
+    if (!parse_uint16(&p, &pulse_us) || pulse_us > 20000) {
+        return CMD_INVALID_ANGLE;  // Reuse error code for invalid value
+    }
+
+    // Execute command
+    cmd_set_servo_pwm_us(channel, pulse_us);
+
+    return CMD_OK;
+}
+
+/*
  * Execute GET command (query servo position)
  */
 static uint8_t execute_get_command(const char *cmd) {
@@ -319,6 +361,9 @@ void serial_send_help(void) {
     uart_puts("S<n>:<angle>       - Set servo n to angle (0-180)\n");
     uart_puts("                     n = 0-9,A-F (hex)\n");
     uart_puts("                     Example: S0:90, S5:45, SA:120\n");
+    uart_puts("P<n>:<pulse_us>    - Set servo n PWM pulse width (0-20000us)\n");
+    uart_puts("                     n = 0-9,A-F (hex)\n");
+    uart_puts("                     Example: P0:1500, P5:1000, PA:2000\n");
     uart_puts("POSE <angles>      - Set multiple servos instantly\n");
     uart_puts("                     Example: POSE 90,45,120,90,60,30\n");
     uart_puts("                     Sets servos 0,1,2,3,4,5\n");
@@ -368,6 +413,28 @@ static uint8_t process_command(const char *cmd) {
                 break;
             case CMD_INVALID_ANGLE:
                 uart_puts("ERROR: Invalid angle (must be 0-180)\n");
+                break;
+            default:
+                uart_puts("ERROR: Invalid command format\n");
+                break;
+        }
+        return CMD_OK;
+    }
+
+    // PWM command (P0:1500 format)
+    if (cmd[0] == 'P' || cmd[0] == 'p') {
+        uint8_t result = execute_pwm_command(cmd);
+        switch (result) {
+            case CMD_OK:
+                uart_puts("OK\n");
+                break;
+            case CMD_INVALID_SERVO:
+                uart_puts("ERROR: Invalid servo (must be 0-");
+                uart_putc(value_to_hex(NUM_SERVOS - 1));
+                uart_puts(" hex)\n");
+                break;
+            case CMD_INVALID_ANGLE:
+                uart_puts("ERROR: Invalid pulse width (must be 0-20000us)\n");
                 break;
             default:
                 uart_puts("ERROR: Invalid command format\n");
