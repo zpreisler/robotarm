@@ -90,6 +90,14 @@ void pca9685_set_servo_angle(uint8_t address, uint8_t channel, uint8_t angle);
 void pca9685_set_servo_pulse(uint8_t address, uint8_t channel, uint16_t pulse_us);
 
 /**
+ * Set servo PWM value directly (for calibration)
+ * @param address I2C address of PCA9685
+ * @param channel Channel number (0-15)
+ * @param pwm_value Direct PWM value (0-4095)
+ */
+void pca9685_set_servo_pwm(uint8_t address, uint8_t channel, uint16_t pwm_value);
+
+/**
  * Turn off all PWM outputs
  * @param address I2C address of PCA9685
  */

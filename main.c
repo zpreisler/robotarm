@@ -9,6 +9,7 @@
 #include "pca9685.h"
 #include "uart.h"
 #include "serial_commands.h"
+#include "lcd_menu.h"
 
 int main(void) {
     // Initialize all systems
@@ -27,7 +28,7 @@ int main(void) {
     lcd_print("Robot Arm Ready");
     uart_puts("\n=== Robot Arm Controller ===\n");
     uart_puts("Type START for serial mode\n");
-    uart_puts("Or use buttons for manual control\n\n");
+    uart_puts("Or use buttons for menu control\n\n");
     _delay_ms(1000);
 
     // Set all servos to center position (90 degrees)
@@ -35,67 +36,22 @@ int main(void) {
         pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, i, 90);
     }
 
-    uint8_t selected_servo = 0;
-    uint8_t servo_angle = 90;
+    // Initialize LCD menu system
+    lcd_menu_init();
 
     while (1) {
-        // Check for serial START command (Option 3: Explicit mode control)
+        // Check for serial START command
         if (serial_check_start()) {
             // Enter serial mode (blocking until STOP command)
             serial_mode();
 
-            // After exiting serial mode, continue with button mode
+            // After exiting serial mode, redisplay menu
+            lcd_menu_init();
             continue;
         }
 
-        // Button mode - read button state
-        button_t button = buttons_read();
-
-        // Handle button presses
-        if (button == BUTTON_RIGHT && selected_servo < (NUM_SERVOS - 1)) {
-            selected_servo++;
-            _delay_ms(200);
-        }
-        else if (button == BUTTON_LEFT && selected_servo > 0) {
-            selected_servo--;
-            _delay_ms(200);
-        }
-        else if (button == BUTTON_UP && servo_angle < 180) {
-            servo_angle += 5;
-            pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, selected_servo, servo_angle);
-            _delay_ms(100);
-        }
-        else if (button == BUTTON_DOWN && servo_angle > 0) {
-            servo_angle -= 5;
-            pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, selected_servo, servo_angle);
-            _delay_ms(100);
-        }
-        else if (button == BUTTON_SELECT) {
-            // Reset selected servo to center
-            servo_angle = 90;
-            pca9685_set_servo_angle(PCA9685_DEFAULT_ADDRESS, selected_servo, servo_angle);
-            _delay_ms(200);
-        }
-
-        // Update LCD display
-        lcd_clear();
-        lcd_print("Servo:");
-        // Print servo number in hex (0-9, A-F)
-        if (selected_servo < 10) {
-            lcd_putc(selected_servo + '0');
-        } else {
-            lcd_putc(selected_servo - 10 + 'A');
-        }
-        lcd_print(" Ang:");
-
-        // Display angle (simple integer display)
-        if (servo_angle >= 100) {
-            lcd_putc((servo_angle / 100) + '0');  // Hundreds digit
-        }
-        if (servo_angle >= 10) {
-            lcd_putc(((servo_angle / 10) % 10) + '0');  // Tens digit
-        }
-        lcd_putc((servo_angle % 10) + '0');  // Ones digit
+        // Update LCD menu (handles button input and display)
+        lcd_menu_update();
 
         _delay_ms(50);
     }

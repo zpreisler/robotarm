@@ -125,6 +125,20 @@ void pca9685_set_servo_pulse(uint8_t address, uint8_t channel, uint16_t pulse_us
 }
 
 /*
+ * Set servo PWM value directly (for calibration)
+ * Bypasses angle/pulse conversion for direct hardware control
+ */
+void pca9685_set_servo_pwm(uint8_t address, uint8_t channel, uint16_t pwm_value) {
+    // Limit to 12-bit value
+    if (pwm_value > 4095) {
+        pwm_value = 4095;
+    }
+
+    // Set PWM with ON time at 0, OFF time at specified value
+    pca9685_set_pwm(address, channel, 0, pwm_value);
+}
+
+/*
  * Turn off all PWM outputs
  */
 void pca9685_all_off(uint8_t address) {
