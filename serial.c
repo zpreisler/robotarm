@@ -578,24 +578,6 @@ uint8_t serial_check_start(void) {
             if (start_index > 0) {
                 start_buffer[start_index] = '\0';
 
-                // DEBUG: Show what we received with length and hex codes
-                uart_puts("DEBUG: Received [");
-                uart_puts(start_buffer);
-                uart_puts("] len=");
-                // Print length as decimal
-                uint8_t len = start_index;
-                if (len >= 10) uart_putc((len / 10) + '0');
-                uart_putc((len % 10) + '0');
-                uart_puts(" hex=");
-                // Print first few chars as hex
-                for (uint8_t i = 0; i < len && i < 10; i++) {
-                    uint8_t val = (uint8_t)start_buffer[i];
-                    uart_putc((val >> 4) < 10 ? ((val >> 4) + '0') : ((val >> 4) - 10 + 'A'));
-                    uart_putc((val & 0x0F) < 10 ? ((val & 0x0F) + '0') : ((val & 0x0F) - 10 + 'A'));
-                    uart_putc(' ');
-                }
-                uart_puts("\n");
-
                 // Check if it's START
                 if (strcmp(start_buffer, "START") == 0 || strcmp(start_buffer, "start") == 0) {
                     start_index = 0;  // Reset for next time

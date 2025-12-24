@@ -18,7 +18,7 @@ int main(void) {
     lcd_init();
     lcd_backlight_on();
     buttons_init();
-    uart_init(UART_BAUD_9600);
+    uart_init(UART_BAUD_115200);
     serial_init();
 
     // Initialize PCA9685 for servo control
