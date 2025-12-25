@@ -415,51 +415,7 @@ static uint8_t process_command(const char *cmd) {
         return CMD_OK;
     }
 
-    // Servo command (S0:90 format)
-    if (cmd[0] == 'S' || cmd[0] == 's') {
-        uint8_t result = execute_servo_command(cmd);
-        switch (result) {
-            case CMD_OK:
-                uart_puts("OK\n");
-                break;
-            case CMD_INVALID_SERVO:
-                uart_puts("ERROR: Invalid servo (must be 0-");
-                uart_putc(value_to_hex(NUM_SERVOS - 1));
-                uart_puts(" hex)\n");
-                break;
-            case CMD_INVALID_ANGLE:
-                uart_puts("ERROR: Invalid angle (must be 0-180)\n");
-                break;
-            default:
-                uart_puts("ERROR: Invalid command format\n");
-                break;
-        }
-        return CMD_OK;
-    }
-
-    // PWM command (P0:1500 format)
-    if (cmd[0] == 'P' || cmd[0] == 'p') {
-        uint8_t result = execute_pwm_command(cmd);
-        switch (result) {
-            case CMD_OK:
-                uart_puts("OK\n");
-                break;
-            case CMD_INVALID_SERVO:
-                uart_puts("ERROR: Invalid servo (must be 0-");
-                uart_putc(value_to_hex(NUM_SERVOS - 1));
-                uart_puts(" hex)\n");
-                break;
-            case CMD_INVALID_ANGLE:
-                uart_puts("ERROR: Invalid pulse width (must be 0-20000us)\n");
-                break;
-            default:
-                uart_puts("ERROR: Invalid command format\n");
-                break;
-        }
-        return CMD_OK;
-    }
-
-    // GET command
+    // GET command (check multi-character commands first!)
     if (strncmp(cmd, "GET ", 4) == 0 || strncmp(cmd, "get ", 4) == 0) {
         uint8_t result = execute_get_command(cmd);
         if (result != CMD_OK) {
@@ -468,7 +424,7 @@ static uint8_t process_command(const char *cmd) {
         return CMD_OK;
     }
 
-    // POSE command
+    // POSE command (check before P command!)
     if (strncmp(cmd, "POSE ", 5) == 0 || strncmp(cmd, "pose ", 5) == 0) {
         uint8_t result = execute_pose_command(cmd);
         switch (result) {
@@ -507,6 +463,50 @@ static uint8_t process_command(const char *cmd) {
                 break;
             default:
                 uart_puts("ERROR: Invalid MOVE format\n");
+                break;
+        }
+        return CMD_OK;
+    }
+
+    // Servo command (S0:90 format) - checked after multi-character commands
+    if (cmd[0] == 'S' || cmd[0] == 's') {
+        uint8_t result = execute_servo_command(cmd);
+        switch (result) {
+            case CMD_OK:
+                uart_puts("OK\n");
+                break;
+            case CMD_INVALID_SERVO:
+                uart_puts("ERROR: Invalid servo (must be 0-");
+                uart_putc(value_to_hex(NUM_SERVOS - 1));
+                uart_puts(" hex)\n");
+                break;
+            case CMD_INVALID_ANGLE:
+                uart_puts("ERROR: Invalid angle (must be 0-180)\n");
+                break;
+            default:
+                uart_puts("ERROR: Invalid command format\n");
+                break;
+        }
+        return CMD_OK;
+    }
+
+    // PWM command (P0:1500 format) - checked after POSE
+    if (cmd[0] == 'P' || cmd[0] == 'p') {
+        uint8_t result = execute_pwm_command(cmd);
+        switch (result) {
+            case CMD_OK:
+                uart_puts("OK\n");
+                break;
+            case CMD_INVALID_SERVO:
+                uart_puts("ERROR: Invalid servo (must be 0-");
+                uart_putc(value_to_hex(NUM_SERVOS - 1));
+                uart_puts(" hex)\n");
+                break;
+            case CMD_INVALID_ANGLE:
+                uart_puts("ERROR: Invalid pulse width (must be 0-20000us)\n");
+                break;
+            default:
+                uart_puts("ERROR: Invalid command format\n");
                 break;
         }
         return CMD_OK;

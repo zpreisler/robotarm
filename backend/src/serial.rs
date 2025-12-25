@@ -18,7 +18,7 @@ impl SerialManager {
         info!("Opening serial port {} at {} baud", port_name, baud_rate);
 
         let port = tokio_serial::new(port_name, baud_rate)
-            .timeout(Duration::from_secs(2))
+            .timeout(Duration::from_secs(12))
             .open()
             .context("Failed to open serial port")?;
 
