@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend
+    devices:
+      - /dev/ttyUSB0:/dev/ttyUSB0
+    environment:
+      - RUST_LOG=info
+      - SERIAL_PORT=/dev/ttyUSB0
+      - SERIAL_BAUD=115200
+      - BIND_ADDR=0.0.0.0:3000
+    restart: unless-stopped
+    networks:
+      - robotarm-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: robotarm-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - robotarm-network
+
+networks:
+  robotarm-network:
+    driver: bridge
