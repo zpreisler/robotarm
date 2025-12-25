@@ -45,9 +45,9 @@
 #define PCA9685_PWM_FULL       4096
 
 /* Servo timing defaults (microseconds) */
-#define SERVO_MIN_PULSE        500   // Extended range - try wider pulses
-#define SERVO_MAX_PULSE        2500  // Extended range - try wider pulses
-#define SERVO_CENTER_PULSE     1500
+#define SERVO_MIN_PULSE        600   // Extended range - try wider pulses
+#define SERVO_MAX_PULSE        2600  // Extended range - try wider pulses
+#define SERVO_CENTER_PULSE     1600
 
 /* Function declarations */
 

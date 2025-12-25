@@ -443,8 +443,8 @@ const App: Component = () => {
                           </label>
                           <input
                             type="range"
-                            min="0"
-                            max="20000"
+                            min="400"
+                            max="2800"
                             step="10"
                             value={servoPWMs()[servoId]}
                             onInput={(e) => {
@@ -460,13 +460,13 @@ const App: Component = () => {
                         <div class="mb-3">
                           <input
                             type="number"
-                            min="0"
-                            max="20000"
+                            min="400"
+                            max="2800"
                             step="10"
                             value={servoPWMs()[servoId]}
                             onInput={(e) => {
                               const val = parseInt(e.currentTarget.value);
-                              if (val >= 0 && val <= 20000) {
+                              if (val >= 400 && val <= 2800) {
                                 const newPWMs = [...servoPWMs()];
                                 newPWMs[servoId] = val;
                                 setServoPWMs(newPWMs);
@@ -474,7 +474,7 @@ const App: Component = () => {
                             }}
                             disabled={!serialMode()}
                             class="w-full px-3 py-2 border border-gray-300 rounded disabled:opacity-50"
-                            placeholder="0-20000"
+                            placeholder="400-2800"
                           />
                         </div>
 
