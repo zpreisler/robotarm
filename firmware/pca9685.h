@@ -46,8 +46,8 @@
 
 /* Servo timing defaults (microseconds) */
 #define SERVO_MIN_PULSE        600   // Extended range - try wider pulses
-#define SERVO_MAX_PULSE        2600  // Extended range - try wider pulses
-#define SERVO_CENTER_PULSE     1600
+#define SERVO_MAX_PULSE        2700  // Extended range - try wider pulses
+#define SERVO_CENTER_PULSE     1650
 
 /* Function declarations */
 
