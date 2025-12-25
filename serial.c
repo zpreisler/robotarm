@@ -531,11 +531,9 @@ void serial_mode(void) {
 
     // Main command loop
     while (1) {
-        // Send prompt for interactive use
-        uart_puts("> ");
-
-        // Read command with echo enabled for interactive use
-        char *cmd = read_command_line(1);
+        // Read command without echo (for programmatic control)
+        // For interactive use with terminals like screen, use echo in the terminal
+        char *cmd = read_command_line(0);
 
         // Process command
         uint8_t result = process_command(cmd);
