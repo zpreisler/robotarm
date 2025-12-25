@@ -50,48 +50,58 @@ impl SerialManager {
         debug!("Sending command: {:?}", cmd.trim());
         debug!("Sending bytes: {:?}", cmd.as_bytes());
 
-        // Clear any stale data in the buffer before sending
-        port.clear(tokio_serial::ClearBuffer::Input)
-            .context("Failed to clear input buffer before sending")?;
+        // Wrap in closure to catch errors
+        let result = (|| -> Result<String> {
+            // Clear any stale data in the buffer before sending
+            port.clear(tokio_serial::ClearBuffer::Input)
+                .context("Failed to clear input buffer before sending")?;
 
-        // Send command
-        port.write_all(cmd.as_bytes())
-            .context("Failed to write to serial port")?;
-        port.flush()
-            .context("Failed to flush serial port")?;
+            // Send command
+            port.write_all(cmd.as_bytes())
+                .context("Failed to write to serial port")?;
+            port.flush()
+                .context("Failed to flush serial port")?;
 
-        // Give the AVR time to process and respond
-        std::thread::sleep(std::time::Duration::from_millis(200));
+            // Give the AVR time to process and respond
+            std::thread::sleep(std::time::Duration::from_millis(200));
 
-        // Read response - use the port directly, not a clone
-        let mut response = Vec::new();
-        let mut buf = [0u8; 1];
+            // Read response - use the port directly, not a clone
+            let mut response = Vec::new();
+            let mut buf = [0u8; 1];
 
-        // Read until we get a newline
-        loop {
-            match port.read(&mut buf) {
-                Ok(n) if n > 0 => {
-                    response.push(buf[0]);
-                    if buf[0] == b'\n' {
-                        break;
+            // Read until we get a newline
+            loop {
+                match port.read(&mut buf) {
+                    Ok(n) if n > 0 => {
+                        response.push(buf[0]);
+                        if buf[0] == b'\n' {
+                            break;
+                        }
+                        // Safety: don't read forever
+                        if response.len() > 256 {
+                            break;
+                        }
                     }
-                    // Safety: don't read forever
-                    if response.len() > 256 {
-                        break;
-                    }
+                    Ok(_) => break, // EOF or no data
+                    Err(e) if e.kind() == std::io::ErrorKind::TimedOut => break,
+                    Err(e) => return Err(e).context("Failed to read from serial port")?,
                 }
-                Ok(_) => break, // EOF or no data
-                Err(e) if e.kind() == std::io::ErrorKind::TimedOut => break,
-                Err(e) => return Err(e).context("Failed to read from serial port")?,
             }
+
+            let response = String::from_utf8_lossy(&response).to_string();
+            debug!("Read {} bytes: {:?}", response.len(), response.as_bytes());
+            debug!("Response string: {:?}", response);
+            debug!("Response trimmed: {:?}", response.trim());
+
+            Ok(response)
+        })();
+
+        // If error occurs, log it (caller will handle dropping SerialManager)
+        if let Err(ref e) = result {
+            error!("Serial communication error: {}", e);
         }
 
-        let response = String::from_utf8_lossy(&response).to_string();
-        debug!("Read {} bytes: {:?}", response.len(), response.as_bytes());
-        debug!("Response string: {:?}", response);
-        debug!("Response trimmed: {:?}", response.trim());
-
-        Ok(response)
+        result
     }
 
     /// Convert channel number to hex character (0-9, A-F)

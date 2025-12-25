@@ -36,14 +36,64 @@ async fn main() {
     info!("Starting robot arm backend");
     info!("Serial port: {} @ {} baud", serial_port, serial_baud);
 
-    // Initialize serial connection
-    let serial_manager = SerialManager::new(&serial_port, serial_baud)
-        .expect("Failed to initialize serial connection");
+    // Try initial connection (non-blocking)
+    let initial_serial = match SerialManager::new(&serial_port, serial_baud) {
+        Ok(manager) => {
+            info!("Serial connection established");
+            Some(Arc::new(manager))
+        }
+        Err(e) => {
+            tracing::warn!("Serial device not available at startup: {}", e);
+            tracing::warn!("Will retry connection in background");
+            None
+        }
+    };
 
     // Create shared state
     let state = Arc::new(AppState {
-        serial: Arc::new(serial_manager),
+        serial: Arc::new(std::sync::Mutex::new(initial_serial)),
+        serial_port_name: serial_port.clone(),
+        serial_baud_rate: serial_baud,
     });
+
+    // Background task for automatic reconnection
+    let reconnect_state = state.clone();
+    let reconnect_port = serial_port.clone();
+    let reconnect_baud = serial_baud;
+
+    tokio::spawn(async move {
+        use std::time::Duration;
+        use tracing::debug;
+
+        let mut interval = tokio::time::interval(Duration::from_secs(5));
+        interval.tick().await; // Skip first immediate tick
+
+        loop {
+            interval.tick().await;
+
+            // Check if we need to reconnect
+            let needs_connection = {
+                let serial = reconnect_state.serial.lock().unwrap();
+                serial.is_none()
+            };
+
+            if needs_connection {
+                debug!("Attempting to reconnect to serial device...");
+                match SerialManager::new(&reconnect_port, reconnect_baud) {
+                    Ok(manager) => {
+                        info!("Serial connection re-established");
+                        let mut serial = reconnect_state.serial.lock().unwrap();
+                        *serial = Some(Arc::new(manager));
+                    }
+                    Err(e) => {
+                        debug!("Reconnection failed: {}", e);
+                    }
+                }
+            }
+        }
+    });
+
+    info!("Background reconnection task started (checks every 5 seconds)");
 
     // Configure CORS
     let cors = CorsLayer::new()

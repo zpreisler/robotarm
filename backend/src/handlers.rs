@@ -3,22 +3,74 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use std::sync::Arc;
-use tracing::error;
+use std::sync::{Arc, Mutex};
+use tracing::{error, warn};
 
 use crate::models::*;
 use crate::serial::SerialManager;
 
 /// Shared application state
 pub struct AppState {
-    pub serial: Arc<SerialManager>,
+    pub serial: Arc<Mutex<Option<Arc<SerialManager>>>>,
+    pub serial_port_name: String,
+    pub serial_baud_rate: u32,
+}
+
+impl AppState {
+    fn get_serial(&self) -> Option<Arc<SerialManager>> {
+        self.serial.lock().unwrap().clone()
+    }
+}
+
+/// Handle serial errors and detect disconnections
+fn handle_serial_error(
+    state: &AppState,
+    error: &anyhow::Error,
+) -> (StatusCode, Json<ErrorResponse>) {
+    // If error indicates I/O failure, drop the serial manager
+    let error_msg = error.to_string();
+    if error_msg.contains("Failed to clear input buffer")
+        || error_msg.contains("Failed to write")
+        || error_msg.contains("Failed to read")
+    {
+        warn!(
+            "Serial I/O error detected, dropping connection for reconnection: {}",
+            error
+        );
+        let mut serial = state.serial.lock().unwrap();
+        *serial = None;
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(ErrorResponse {
+                error: "Serial device disconnected, reconnecting...".to_string(),
+            }),
+        )
+    } else {
+        (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                error: error.to_string(),
+            }),
+        )
+    }
 }
 
 /// Health check endpoint
-pub async fn health_check(State(_state): State<Arc<AppState>>) -> Json<HealthResponse> {
+pub async fn health_check(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
+    let serial_status = match state.get_serial() {
+        Some(_) => "connected".to_string(),
+        None => "not_connected".to_string(),
+    };
+
+    let overall_status = if serial_status == "connected" {
+        "ok".to_string()
+    } else {
+        "degraded".to_string()
+    };
+
     Json(HealthResponse {
-        status: "ok".to_string(),
-        serial: "connected".to_string(),
+        status: overall_status,
+        serial: serial_status,
     })
 }
 
@@ -26,18 +78,25 @@ pub async fn health_check(State(_state): State<Arc<AppState>>) -> Json<HealthRes
 pub async fn start_serial_mode(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match state.serial.start_serial_mode() {
+    let serial = match state.get_serial() {
+        Some(s) => s,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Serial device not connected".to_string(),
+                }),
+            ));
+        }
+    };
+
+    match serial.start_serial_mode() {
         Ok(_) => Ok(Json(SuccessResponse {
             status: "serial_mode".to_string(),
         })),
         Err(e) => {
             error!("Failed to start serial mode: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to start serial mode: {}", e),
-                }),
-            ))
+            Err(handle_serial_error(&state, &e))
         }
     }
 }
@@ -46,18 +105,25 @@ pub async fn start_serial_mode(
 pub async fn stop_serial_mode(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match state.serial.stop_serial_mode() {
+    let serial = match state.get_serial() {
+        Some(s) => s,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Serial device not connected".to_string(),
+                }),
+            ));
+        }
+    };
+
+    match serial.stop_serial_mode() {
         Ok(_) => Ok(Json(SuccessResponse {
             status: "button_mode".to_string(),
         })),
         Err(e) => {
             error!("Failed to stop serial mode: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to stop serial mode: {}", e),
-                }),
-            ))
+            Err(handle_serial_error(&state, &e))
         }
     }
 }
@@ -68,18 +134,25 @@ pub async fn set_servo_angle(
     Path(id): Path<u8>,
     Json(req): Json<SetAngleRequest>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match state.serial.set_servo_angle(id, req.angle) {
+    let serial = match state.get_serial() {
+        Some(s) => s,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Serial device not connected".to_string(),
+                }),
+            ));
+        }
+    };
+
+    match serial.set_servo_angle(id, req.angle) {
         Ok(_) => Ok(Json(SuccessResponse {
             status: "ok".to_string(),
         })),
         Err(e) => {
             error!("Failed to set servo {} angle: {}", id, e);
-            Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: format!("Failed to set servo angle: {}", e),
-                }),
-            ))
+            Err(handle_serial_error(&state, &e))
         }
     }
 }
@@ -90,18 +163,25 @@ pub async fn set_servo_pwm(
     Path(id): Path<u8>,
     Json(req): Json<SetPwmRequest>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match state.serial.set_servo_pwm(id, req.pulse_us) {
+    let serial = match state.get_serial() {
+        Some(s) => s,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Serial device not connected".to_string(),
+                }),
+            ));
+        }
+    };
+
+    match serial.set_servo_pwm(id, req.pulse_us) {
         Ok(_) => Ok(Json(SuccessResponse {
             status: "ok".to_string(),
         })),
         Err(e) => {
             error!("Failed to set servo {} PWM: {}", id, e);
-            Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: format!("Failed to set servo PWM: {}", e),
-                }),
-            ))
+            Err(handle_serial_error(&state, &e))
         }
     }
 }
@@ -111,19 +191,26 @@ pub async fn get_servo_position(
     State(state): State<Arc<AppState>>,
     Path(id): Path<u8>,
 ) -> Result<Json<ServoPosition>, (StatusCode, Json<ErrorResponse>)> {
-    match state.serial.get_servo_angle(id) {
+    let serial = match state.get_serial() {
+        Some(s) => s,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Serial device not connected".to_string(),
+                }),
+            ));
+        }
+    };
+
+    match serial.get_servo_angle(id) {
         Ok(angle) => Ok(Json(ServoPosition {
             channel: id,
             angle,
         })),
         Err(e) => {
             error!("Failed to get servo {} position: {}", id, e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to get servo position: {}", e),
-                }),
-            ))
+            Err(handle_serial_error(&state, &e))
         }
     }
 }
@@ -132,7 +219,19 @@ pub async fn get_servo_position(
 pub async fn get_all_servos(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<ServoPositions>, (StatusCode, Json<ErrorResponse>)> {
-    match state.serial.get_all_servos() {
+    let serial = match state.get_serial() {
+        Some(s) => s,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Serial device not connected".to_string(),
+                }),
+            ));
+        }
+    };
+
+    match serial.get_all_servos() {
         Ok(servos) => {
             let positions = servos
                 .into_iter()
@@ -142,12 +241,7 @@ pub async fn get_all_servos(
         }
         Err(e) => {
             error!("Failed to get all servos: {}", e);
-            Err((
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(ErrorResponse {
-                    error: format!("Failed to get servo positions: {}", e),
-                }),
-            ))
+            Err(handle_serial_error(&state, &e))
         }
     }
 }
@@ -157,18 +251,25 @@ pub async fn execute_pose(
     State(state): State<Arc<AppState>>,
     Json(req): Json<PoseRequest>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match state.serial.execute_pose(&req.angles) {
+    let serial = match state.get_serial() {
+        Some(s) => s,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Serial device not connected".to_string(),
+                }),
+            ));
+        }
+    };
+
+    match serial.execute_pose(&req.angles) {
         Ok(_) => Ok(Json(SuccessResponse {
             status: "ok".to_string(),
         })),
         Err(e) => {
             error!("Failed to execute POSE: {}", e);
-            Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: format!("Failed to execute POSE: {}", e),
-                }),
-            ))
+            Err(handle_serial_error(&state, &e))
         }
     }
 }
@@ -178,18 +279,25 @@ pub async fn execute_move(
     State(state): State<Arc<AppState>>,
     Json(req): Json<MoveRequest>,
 ) -> Result<Json<SuccessResponse>, (StatusCode, Json<ErrorResponse>)> {
-    match state.serial.execute_move(req.duration_ms, &req.angles) {
+    let serial = match state.get_serial() {
+        Some(s) => s,
+        None => {
+            return Err((
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(ErrorResponse {
+                    error: "Serial device not connected".to_string(),
+                }),
+            ));
+        }
+    };
+
+    match serial.execute_move(req.duration_ms, &req.angles) {
         Ok(_) => Ok(Json(SuccessResponse {
             status: "ok".to_string(),
         })),
         Err(e) => {
             error!("Failed to execute MOVE: {}", e);
-            Err((
-                StatusCode::BAD_REQUEST,
-                Json(ErrorResponse {
-                    error: format!("Failed to execute MOVE: {}", e),
-                }),
-            ))
+            Err(handle_serial_error(&state, &e))
         }
     }
 }
