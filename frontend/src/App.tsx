@@ -38,7 +38,7 @@ interface ServoPositions {
   servos: ServoPosition[];
 }
 
-type TabType = 'motors' | 'calibration' | 'pose' | 'move' | 'sequence';
+type TabType = 'pose' | 'move' | 'manual' | 'calibration' | 'sequence';
 
 interface ConsoleMessage {
   type: 'success' | 'error' | 'info';
@@ -131,7 +131,7 @@ const App: Component = () => {
   // State Management
   const [numServos, setNumServos] = createSignal(6);
   const [serialMode, setSerialMode] = createSignal(false);
-  const [currentTab, setCurrentTab] = createSignal<TabType>('motors');
+  const [currentTab, setCurrentTab] = createSignal<TabType>('pose');
   const [servoAngles, setServoAngles] = createSignal<number[]>(Array(6).fill(90));
   const [servoPWMs, setServoPWMs] = createSignal<number[]>(Array(6).fill(1500));
   const [poseAngles, setPoseAngles] = createSignal<number[]>(Array(6).fill(90));
@@ -416,26 +416,6 @@ const App: Component = () => {
           <div class="border-b border-gray-200">
             <nav class="flex -mb-px">
               <button
-                onClick={() => setCurrentTab('motors')}
-                class={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  currentTab() === 'motors'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Motors
-              </button>
-              <button
-                onClick={() => setCurrentTab('calibration')}
-                class={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
-                  currentTab() === 'calibration'
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                }`}
-              >
-                Calibration
-              </button>
-              <button
                 onClick={() => setCurrentTab('pose')}
                 class={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
                   currentTab() === 'pose'
@@ -456,6 +436,26 @@ const App: Component = () => {
                 MOVE
               </button>
               <button
+                onClick={() => setCurrentTab('manual')}
+                class={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  currentTab() === 'manual'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Manual
+              </button>
+              <button
+                onClick={() => setCurrentTab('calibration')}
+                class={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  currentTab() === 'calibration'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Calibration
+              </button>
+              <button
                 onClick={() => setCurrentTab('sequence')}
                 class={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
                   currentTab() === 'sequence'
@@ -470,8 +470,8 @@ const App: Component = () => {
 
           {/* Tab Content */}
           <div class="p-6">
-            {/* Motors Tab */}
-            <Show when={currentTab() === 'motors'}>
+            {/* Manual Tab */}
+            <Show when={currentTab() === 'manual'}>
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 <For each={Array(numServos()).fill(0)}>
                   {(_, index) => {

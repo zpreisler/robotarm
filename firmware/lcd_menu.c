@@ -14,10 +14,10 @@ typedef enum {
 } menu_state_t;
 
 /* Menu options */
-#define MENU_MOTORS      0
-#define MENU_CALIBRATION 1
-#define MENU_POSE        2
-#define MENU_MOVE        3
+#define MENU_POSE        0
+#define MENU_MOVE        1
+#define MENU_MANUAL      2
+#define MENU_CALIBRATION 3
 #define NUM_MENU_OPTIONS 4
 
 /* Global state variables */
@@ -54,17 +54,17 @@ static void print_menu_item(uint8_t item, uint8_t is_selected) {
 
     // Print item name
     switch (item) {
-        case MENU_MOTORS:
-            lcd_print("Motors");
-            break;
-        case MENU_CALIBRATION:
-            lcd_print("Calibration");
-            break;
         case MENU_POSE:
             lcd_print("POSE");
             break;
         case MENU_MOVE:
             lcd_print("MOVE");
+            break;
+        case MENU_MANUAL:
+            lcd_print("Manual");
+            break;
+        case MENU_CALIBRATION:
+            lcd_print("Calibration");
             break;
     }
 }
@@ -88,10 +88,10 @@ static void display_menu(void) {
     print_menu_item(first_visible + 1, menu_selection == first_visible + 1);
 }
 
-/* Display Mode 1: Motors (angle control) */
+/* Display Mode: Manual (angle control) */
 static void display_motors(void) {
     lcd_clear();
-    lcd_print("Motor ");
+    lcd_print("Manual ");
     lcd_putc(selected_servo + '0');
 
     lcd_set_cursor(0x40);
@@ -228,14 +228,6 @@ uint8_t lcd_menu_update(void) {
             selected_servo = 0;
 
             switch (menu_selection) {
-                case MENU_MOTORS:
-                    current_state = STATE_MOTORS;
-                    display_motors();
-                    break;
-                case MENU_CALIBRATION:
-                    current_state = STATE_CALIBRATION;
-                    display_calibration();
-                    break;
                 case MENU_POSE:
                     current_state = STATE_POSE;
                     display_pose();
@@ -243,6 +235,14 @@ uint8_t lcd_menu_update(void) {
                 case MENU_MOVE:
                     current_state = STATE_MOVE;
                     display_move();
+                    break;
+                case MENU_MANUAL:
+                    current_state = STATE_MOTORS;
+                    display_motors();
+                    break;
+                case MENU_CALIBRATION:
+                    current_state = STATE_CALIBRATION;
+                    display_calibration();
                     break;
             }
             _delay_ms(200);
