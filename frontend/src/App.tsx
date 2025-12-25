@@ -38,12 +38,19 @@ interface ServoPositions {
   servos: ServoPosition[];
 }
 
-type TabType = 'motors' | 'calibration' | 'pose' | 'move';
+type TabType = 'motors' | 'calibration' | 'pose' | 'move' | 'sequence';
 
 interface ConsoleMessage {
   type: 'success' | 'error' | 'info';
   text: string;
   timestamp: Date;
+}
+
+interface SequenceCommand {
+  type: 'POSE' | 'MOVE' | 'WAIT';
+  line: string;
+  angles?: number[];
+  duration?: number;
 }
 
 // ============================================================================
@@ -133,6 +140,10 @@ const App: Component = () => {
   const [loading, setLoading] = createSignal(false);
   const [loadingServo, setLoadingServo] = createSignal<number | null>(null);
   const [consoleMessages, setConsoleMessages] = createSignal<ConsoleMessage[]>([]);
+  const [sequenceText, setSequenceText] = createSignal('');
+  const [parsedCommands, setParsedCommands] = createSignal<SequenceCommand[]>([]);
+  const [executingIndex, setExecutingIndex] = createSignal<number | null>(null);
+  const [sequenceRunning, setSequenceRunning] = createSignal(false);
 
   // Effect: Reinitialize arrays when numServos changes
   createEffect(() => {
@@ -166,6 +177,56 @@ const App: Component = () => {
 
   const clearConsole = () => {
     setConsoleMessages([]);
+  };
+
+  // Parse sequence text into commands
+  const parseSequence = (text: string): SequenceCommand[] => {
+    const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const commands: SequenceCommand[] = [];
+
+    for (const line of lines) {
+      // Match POSE command: POSE angle1,angle2,...
+      const poseMatch = line.match(/^POSE\s+(.+)$/i);
+      if (poseMatch) {
+        const angles = poseMatch[1].split(',').map(a => parseInt(a.trim()));
+        if (angles.some(isNaN)) {
+          addConsoleMessage('error', `Invalid POSE angles: ${line}`);
+          continue;
+        }
+        commands.push({ type: 'POSE', line, angles });
+        continue;
+      }
+
+      // Match MOVE command: MOVE duration angle1,angle2,...
+      const moveMatch = line.match(/^MOVE\s+(\d+)\s+(.+)$/i);
+      if (moveMatch) {
+        const duration = parseInt(moveMatch[1]);
+        const angles = moveMatch[2].split(',').map(a => parseInt(a.trim()));
+        if (isNaN(duration) || angles.some(isNaN)) {
+          addConsoleMessage('error', `Invalid MOVE command: ${line}`);
+          continue;
+        }
+        commands.push({ type: 'MOVE', line, duration, angles });
+        continue;
+      }
+
+      // Match WAIT command: WAIT duration
+      const waitMatch = line.match(/^WAIT\s+(\d+)$/i);
+      if (waitMatch) {
+        const duration = parseInt(waitMatch[1]);
+        if (isNaN(duration)) {
+          addConsoleMessage('error', `Invalid WAIT duration: ${line}`);
+          continue;
+        }
+        commands.push({ type: 'WAIT', line, duration });
+        continue;
+      }
+
+      // Unknown command
+      addConsoleMessage('error', `Unknown command: ${line}`);
+    }
+
+    return commands;
   };
 
   // Serial mode toggle
@@ -237,6 +298,63 @@ const App: Component = () => {
       addConsoleMessage('error', error instanceof Error ? error.message : 'Failed to execute MOVE');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Sequence tab: Execute sequence
+  const executeSequenceCommands = async () => {
+    try {
+      setSequenceRunning(true);
+      const commands = parseSequence(sequenceText());
+      setParsedCommands(commands);
+
+      if (commands.length === 0) {
+        addConsoleMessage('error', 'No valid commands to execute');
+        return;
+      }
+
+      addConsoleMessage('info', `Starting sequence with ${commands.length} command(s)`);
+
+      for (let i = 0; i < commands.length; i++) {
+        const cmd = commands[i];
+        setExecutingIndex(i);
+
+        try {
+          switch (cmd.type) {
+            case 'POSE':
+              if (cmd.angles) {
+                await executePose(cmd.angles);
+                addConsoleMessage('success', `POSE executed: ${cmd.angles.join(',')}`);
+              }
+              break;
+
+            case 'MOVE':
+              if (cmd.duration && cmd.angles) {
+                await executeMove(cmd.duration, cmd.angles);
+                addConsoleMessage('success', `MOVE executed: ${cmd.duration}ms to ${cmd.angles.join(',')}`);
+              }
+              break;
+
+            case 'WAIT':
+              if (cmd.duration) {
+                addConsoleMessage('info', `Waiting ${cmd.duration}ms...`);
+                await new Promise(resolve => setTimeout(resolve, cmd.duration));
+              }
+              break;
+          }
+        } catch (error) {
+          addConsoleMessage('error', `Command failed: ${cmd.line} - ${error instanceof Error ? error.message : 'Unknown error'}`);
+          // Stop execution on error
+          break;
+        }
+      }
+
+      addConsoleMessage('info', 'Sequence completed');
+    } catch (error) {
+      addConsoleMessage('error', error instanceof Error ? error.message : 'Failed to execute sequence');
+    } finally {
+      setExecutingIndex(null);
+      setSequenceRunning(false);
     }
   };
 
@@ -336,6 +454,16 @@ const App: Component = () => {
                 }`}
               >
                 MOVE
+              </button>
+              <button
+                onClick={() => setCurrentTab('sequence')}
+                class={`px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+                  currentTab() === 'sequence'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                Sequence
               </button>
             </nav>
           </div>
@@ -632,6 +760,65 @@ const App: Component = () => {
                   class="w-full px-6 py-4 bg-green-600 text-white text-lg font-semibold rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading() ? 'Executing...' : 'Execute MOVE'}
+                </button>
+              </div>
+            </Show>
+
+            {/* Sequence Tab */}
+            <Show when={currentTab() === 'sequence'}>
+              <div class="max-w-4xl mx-auto">
+                {/* Instructions */}
+                <div class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                  <p class="text-sm font-medium mb-1">Command Format:</p>
+                  <ul class="text-xs text-gray-700 space-y-1 ml-4 list-disc">
+                    <li><code>POSE angle1,angle2,...</code> - Set servos instantly</li>
+                    <li><code>MOVE duration angle1,angle2,...</code> - Move servos over time (ms)</li>
+                    <li><code>WAIT duration</code> - Pause execution (ms)</li>
+                  </ul>
+                  <p class="text-xs text-gray-600 mt-2">Example: <code>POSE 30,45,60</code> or <code>MOVE 1000 90,90,90</code></p>
+                </div>
+
+                {/* Sequence Input */}
+                <div class="mb-4">
+                  <label class="block text-sm font-medium text-gray-700 mb-2">Sequence Commands:</label>
+                  <textarea
+                    value={sequenceText()}
+                    onInput={(e) => setSequenceText(e.currentTarget.value)}
+                    disabled={sequenceRunning()}
+                    rows={10}
+                    class="w-full p-3 font-mono text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:bg-gray-100"
+                    placeholder="POSE 90,90,90,90,90,90&#10;WAIT 1000&#10;MOVE 2000 45,45,45,45,45,45&#10;WAIT 500&#10;POSE 90,90,90,90,90,90"
+                  />
+                </div>
+
+                {/* Parsed Commands Display */}
+                <Show when={parsedCommands().length > 0}>
+                  <div class="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                    <h3 class="text-sm font-medium text-gray-700 mb-2">Parsed Commands ({parsedCommands().length}):</h3>
+                    <div class="space-y-1">
+                      <For each={parsedCommands()}>
+                        {(cmd, idx) => (
+                          <div class={`p-2 rounded font-mono text-sm transition-colors ${
+                            executingIndex() === idx()
+                              ? 'bg-yellow-200 border border-yellow-400'
+                              : 'bg-white border border-gray-200'
+                          }`}>
+                            <span class="text-gray-600 mr-2">{idx() + 1}.</span>
+                            {cmd.line}
+                          </div>
+                        )}
+                      </For>
+                    </div>
+                  </div>
+                </Show>
+
+                {/* Execute Button */}
+                <button
+                  onClick={executeSequenceCommands}
+                  disabled={!serialMode() || sequenceRunning() || !sequenceText().trim()}
+                  class="w-full px-6 py-4 bg-green-600 text-white text-lg font-semibold rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {sequenceRunning() ? 'Executing Sequence...' : 'Execute Sequence'}
                 </button>
               </div>
             </Show>

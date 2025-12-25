@@ -107,6 +107,7 @@ void cmd_execute_move(uint16_t duration_ms, const uint8_t *target_angles, uint8_
     }
 
     // Calculate number of interpolation steps (20ms per step)
+    // Match PCA9685 PWM update frequency (50Hz = 20ms period)
     #define MOVE_STEP_DELAY_MS 20
     uint16_t num_steps = duration_ms / MOVE_STEP_DELAY_MS;
     if (num_steps == 0) {
