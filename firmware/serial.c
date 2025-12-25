@@ -404,6 +404,26 @@ static uint8_t process_command(const char *cmd) {
         return CMD_OK;
     }
 
+    // Display command on LCD
+    // Line 1: "Serial Mode"
+    // Line 2: Command (truncated to 16 chars)
+    lcd_clear();
+    lcd_print("Serial Mode");
+    lcd_set_cursor(0x40);  // Move to second line
+
+    char display_buffer[17];  // 16 chars + null terminator
+    uint8_t cmd_len = strlen(cmd);
+    if (cmd_len > 16) {
+        // Truncate to 16 characters
+        for (uint8_t i = 0; i < 16; i++) {
+            display_buffer[i] = cmd[i];
+        }
+        display_buffer[16] = '\0';
+        lcd_print(display_buffer);
+    } else {
+        lcd_print(cmd);
+    }
+
     // STOP command - exit serial mode
     if (strcmp(cmd, "STOP") == 0 || strcmp(cmd, "stop") == 0) {
         return CMD_EXIT;
